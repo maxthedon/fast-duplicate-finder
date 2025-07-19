@@ -46,21 +46,16 @@ func main() {
 		log.Fatalf("Encountered a fatal error: %v", err)
 	}
 
-	// Print results for both
-	printFileResults(fileDuplicates)
-	printFolderResults(folderDuplicates)
-
-	// --- NEW: Filter out nested folder duplicates ---
-	log.Println("Filtering nested duplicate folders to show only top-level results...")
 	filteredFolderDuplicates := filterNestedFolders(folderDuplicates)
-	// --- END NEW ---
+	filteredFilesInDuplicateFolders := filterFilesWithinDuplicateFolders(fileDuplicates, filteredFolderDuplicates)
 
+	printFileResults(filteredFilesInDuplicateFolders)
 	printFolderResults(filteredFolderDuplicates)
 
 	log.Printf(
 		"Summary: Found %d sets of duplicate files and %d sets of duplicate folders.",
-		len(fileDuplicates),
-		len(folderDuplicates),
+		len(filteredFilesInDuplicateFolders),
+		len(filteredFolderDuplicates),
 	)
 
 }
@@ -516,4 +511,65 @@ func filterNestedFolders(folderDuplicates map[string][]string) map[string][]stri
 	}
 
 	return filteredResults
+}
+
+// filterFilesWithinDuplicateFolders removes file duplicates that exist inside
+// the folders that have already been identified as top-level duplicates.
+// This helps to de-clutter the final report, as users are typically more
+// interested in the duplicate folders themselves rather than every file inside them.
+func filterFilesWithinDuplicateFolders(
+	fileDuplicates map[string][]string,
+	filteredFolderDuplicates map[string][]string,
+) map[string][]string {
+
+	// Step 1: Create a fast lookup set of all top-level duplicate folder paths.
+	// We add a path separator to the end to ensure we only match directories,
+	// preventing false positives where a file path might share a prefix with a
+	// folder name (e.g., /data/project vs /data/project-archive).
+	duplicateFolderSet := make(map[string]struct{})
+	for _, paths := range filteredFolderDuplicates {
+		for _, path := range paths {
+			// Ensure path is clean and has a trailing separator for prefix matching.
+			folderPrefix := filepath.Clean(path) + string(os.PathSeparator)
+			duplicateFolderSet[folderPrefix] = struct{}{}
+		}
+	}
+
+	// If there are no duplicate folders, there's nothing to filter.
+	if len(duplicateFolderSet) == 0 {
+		return fileDuplicates
+	}
+
+	// Step 2: Build the new map of file duplicates, excluding the nested files.
+	finalFileDuplicates := make(map[string][]string)
+
+	for hash, paths := range fileDuplicates {
+		// For each group of duplicate files, create a new list containing only
+		// the files that are NOT located inside one of the duplicate folders.
+		var keptPaths []string
+
+		for _, filePath := range paths {
+			isNested := false
+			// Check if the file's path starts with any of the duplicate folder paths.
+			for folderPrefix := range duplicateFolderSet {
+				if strings.HasPrefix(filePath, folderPrefix) {
+					isNested = true
+					break // The file is inside a duplicate folder; no need to check others.
+				}
+			}
+
+			// If the file is not nested within any duplicate folder, add it to our list.
+			if !isNested {
+				keptPaths = append(keptPaths, filePath)
+			}
+		}
+
+		// Step 3: After filtering, if the group still has more than one file,
+		// it's still a valid set of duplicates. Add it to the final results.
+		if len(keptPaths) > 1 {
+			finalFileDuplicates[hash] = keptPaths
+		}
+	}
+
+	return finalFileDuplicates
 }
