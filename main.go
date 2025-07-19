@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -48,6 +49,22 @@ func main() {
 
 	filteredFolderDuplicates := filterNestedFolders(folderDuplicates)
 	filteredFilesInDuplicateFolders := filterFilesWithinDuplicateFolders(fileDuplicates, filteredFolderDuplicates)
+
+	output := resultAsJSON(
+		fileDuplicates,                  // All file duplicates before filtering
+		filteredFilesInDuplicateFolders, // Final file duplicates after filtering
+		folderDuplicates,                // All folder duplicates before filtering
+		filteredFolderDuplicates,        // Final folder duplicates after filtering
+	)
+
+	// Marshal the data into a nicely formatted JSON string.
+	jsonData, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		log.Fatalf("FATAL: Failed to generate JSON report: %v", err)
+	}
+
+	// Print the final JSON to standard output.
+	fmt.Println(string(jsonData))
 
 	printFileResults(filteredFilesInDuplicateFolders)
 	printFolderResults(filteredFolderDuplicates)
@@ -572,4 +589,138 @@ func filterFilesWithinDuplicateFolders(
 	}
 
 	return finalFileDuplicates
+}
+
+// resultAsJSON formats all findings into a single JSON object and prints it to standard output.
+// It includes both the final, filtered results and the complete raw data for comprehensive reporting.
+func resultAsJSON(
+	allFileDuplicates,
+	finalFileDuplicates,
+	allFolderDuplicates,
+	topLevelFolderDuplicates map[string][]string) JSONOutput {
+
+	// Helper function to convert a map of file duplicates to a slice of FileSet.
+	// This avoids code repetition and handles sorting for consistent output.
+	convertFileMapToSets := func(dupes map[string][]string) ([]FileSet, int64) {
+		var totalWasted int64 = 0
+		sets := make([]FileSet, 0, len(dupes))
+		for hash, paths := range dupes {
+			var sizeBytes int64
+			if len(paths) > 0 {
+				info, err := os.Stat(paths[0])
+				if err == nil {
+					sizeBytes = info.Size()
+					// Wasted space is (count - 1) * size for this set
+					if len(paths) > 1 {
+						totalWasted += sizeBytes * int64(len(paths)-1)
+					}
+				} else {
+					log.Printf("Warning: Could not stat file %s to get size: %v", paths[0], err)
+					sizeBytes = -1 // Indicate error
+				}
+			}
+			sets = append(sets, FileSet{Hash: hash, Paths: paths, SizeBytes: sizeBytes})
+		}
+		// Sort by hash for deterministic output
+		sort.Slice(sets, func(i, j int) bool { return sets[i].Hash < sets[j].Hash })
+		return sets, totalWasted
+	}
+
+	// Helper function to convert a map of folder duplicates to a slice of FolderSet.
+	convertFolderMapToSets := func(dupes map[string][]string) []FolderSet {
+		sets := make([]FolderSet, 0, len(dupes))
+		for signature, paths := range dupes {
+			sets = append(sets, FolderSet{Signature: signature, Paths: paths})
+		}
+		// Sort by signature for deterministic output
+		sort.Slice(sets, func(i, j int) bool { return sets[i].Signature < sets[j].Signature })
+		return sets
+	}
+
+	// --- Populate the Final Report ---
+	finalFileSets, wastedSpace := convertFileMapToSets(finalFileDuplicates)
+	topLevelFolderSets := convertFolderMapToSets(topLevelFolderDuplicates)
+
+	// --- Populate the Raw Data Report ---
+	allFileSets, _ := convertFileMapToSets(allFileDuplicates)
+	allFolderSets := convertFolderMapToSets(allFolderDuplicates)
+
+	// --- Assemble the final JSON object ---
+	return JSONOutput{
+		Summary: SummaryInfo{
+			TotalAllFileSets:   len(allFileDuplicates),
+			TotalAllFolderSets: len(allFolderDuplicates),
+			TopLevelFolderSets: len(topLevelFolderDuplicates),
+			StandaloneFileSets: len(finalFileDuplicates),
+			WastedSpaceBytes:   wastedSpace,
+		},
+		FileDuplicates: FileDuplicateReport{
+			Description: "Duplicate files that are NOT inside a top-level duplicate folder.",
+			Sets:        finalFileSets,
+		},
+		FolderDuplicates: FolderDuplicateReport{
+			Description: "Top-level duplicate folders. Files inside these are not listed in 'fileDuplicates'.",
+			Sets:        topLevelFolderSets,
+		},
+		RawData: &RawDataReport{
+			AllFileDuplicates: FileDuplicateReport{
+				Description: "The complete list of all duplicate files found, before any filtering.",
+				Sets:        allFileSets,
+			},
+			AllFolderDuplicates: FolderDuplicateReport{
+				Description: "The complete list of all duplicate folders found, including nested ones.",
+				Sets:        allFolderSets,
+			},
+		},
+	}
+}
+
+// --- JSON Output Structures ---
+
+// JSONOutput is the top-level structure for the final JSON report.
+type JSONOutput struct {
+	Summary          SummaryInfo           `json:"summary"`
+	FileDuplicates   FileDuplicateReport   `json:"fileDuplicates"`
+	FolderDuplicates FolderDuplicateReport `json:"folderDuplicates"`
+	RawData          *RawDataReport        `json:"rawData,omitempty"` // Pointer to omit if empty
+}
+
+// SummaryInfo provides high-level counts of the findings.
+type SummaryInfo struct {
+	TotalAllFileSets   int   `json:"totalAllFileSets"`
+	TotalAllFolderSets int   `json:"totalAllFolderSets"`
+	TopLevelFolderSets int   `json:"topLevelFolderSets"`
+	StandaloneFileSets int   `json:"standaloneFileSets"`
+	WastedSpaceBytes   int64 `json:"wastedSpaceBytes"`
+}
+
+// FileDuplicateReport contains a list of duplicate file sets.
+type FileDuplicateReport struct {
+	Description string    `json:"description"`
+	Sets        []FileSet `json:"sets"`
+}
+
+// FolderDuplicateReport contains a list of duplicate folder sets.
+type FolderDuplicateReport struct {
+	Description string      `json:"description"`
+	Sets        []FolderSet `json:"sets"`
+}
+
+// FileSet represents a single group of identical files.
+type FileSet struct {
+	Hash      string   `json:"hash"`
+	Paths     []string `json:"paths"`
+	SizeBytes int64    `json:"sizeBytes"`
+}
+
+// FolderSet represents a single group of identical folders.
+type FolderSet struct {
+	Signature string   `json:"signature"`
+	Paths     []string `json:"paths"`
+}
+
+// RawDataReport contains the unfiltered, complete results for detailed analysis.
+type RawDataReport struct {
+	AllFileDuplicates   FileDuplicateReport   `json:"allFileDuplicates"`
+	AllFolderDuplicates FolderDuplicateReport `json:"allFolderDuplicates"`
 }
