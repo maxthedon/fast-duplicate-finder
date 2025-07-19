@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +32,7 @@ type hashResult struct {
 	hash string
 }
 
+// MODIFY THIS FUNCTION
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Printf("Usage: %s <directory>\n", os.Args[0])
@@ -38,16 +40,33 @@ func main() {
 	}
 	rootDir := os.Args[1]
 
-	duplicates, err := runFinder(rootDir)
+	// The function now returns two maps
+	fileDuplicates, folderDuplicates, err := runFinder(rootDir)
 	if err != nil {
 		log.Fatalf("Encountered a fatal error: %v", err)
 	}
 
-	//printResults(duplicates)
-	print(len(duplicates))
+	// Print results for both
+	printFileResults(fileDuplicates)
+	printFolderResults(folderDuplicates)
+
+	// --- NEW: Filter out nested folder duplicates ---
+	log.Println("Filtering nested duplicate folders to show only top-level results...")
+	filteredFolderDuplicates := filterNestedFolders(folderDuplicates)
+	// --- END NEW ---
+
+	printFolderResults(filteredFolderDuplicates)
+
+	log.Printf(
+		"Summary: Found %d sets of duplicate files and %d sets of duplicate folders.",
+		len(fileDuplicates),
+		len(folderDuplicates),
+	)
+
 }
 
-func runFinder(rootDir string) (map[string][]string, error) {
+// MODIFY THIS FUNCTION
+func runFinder(rootDir string) (map[string][]string, map[string][]string, error) { // Note the new return signature
 	numWorkers := runtime.NumCPU()
 	log.Printf("Starting duplicate file finder in: %s (using %d workers)\n", rootDir, numWorkers)
 
@@ -66,10 +85,16 @@ func runFinder(rootDir string) (map[string][]string, error) {
 	// --- Phase 3: Confirm duplicates with full hash ---
 	start = time.Now()
 	log.Println("Phase 3: Confirming duplicates with full file hash...")
-	finalDuplicates := phase3FindDuplicatesByFullHash(potentialDupesByPartialHash, numWorkers)
-	log.Printf("Phase 3 completed in %v.\n", time.Since(start))
+	finalFileDuplicates := phase3FindDuplicatesByFullHash(potentialDupesByPartialHash, numWorkers)
+	log.Printf("Phase 3 completed in %v. Found %d sets of duplicate files.\n", time.Since(start), len(finalFileDuplicates))
 
-	return finalDuplicates, nil
+	// --- Phase 4: Find duplicate folders ---
+	start = time.Now()
+	log.Println("Phase 4: Analyzing folder structures for duplicates...")
+	finalFolderDuplicates := phase4FindDuplicateFolders(finalFileDuplicates)
+	log.Printf("Phase 4 completed in %v. Found %d sets of duplicate folders.\n", time.Since(start), len(finalFolderDuplicates))
+
+	return finalFileDuplicates, finalFolderDuplicates, nil // Return both maps
 }
 
 // phase1_groupBySize walks the filesystem and groups files by their size.
@@ -259,6 +284,110 @@ func phase3FindDuplicatesByFullHash(candidates map[string][]string, numWorkers i
 	return duplicates
 }
 
+// ADD THIS ENTIRE NEW FUNCTION
+// phase4FindDuplicateFolders identifies duplicate folders based on the file duplicates found.
+// It uses a recursive, bottom-up approach with memoization to generate a signature
+// for each folder based on its contents (files and sub-folders).
+func phase4FindDuplicateFolders(fileDuplicates map[string][]string) map[string][]string {
+	// Step 1: Create a reverse map for quick hash lookups (path -> hash)
+	pathToHashMap := make(map[string]string)
+	for hash, paths := range fileDuplicates {
+		for _, path := range paths {
+			pathToHashMap[path] = hash
+		}
+	}
+
+	// Step 2: Identify all candidate folders and sort them by depth (deepest first)
+	candidateFoldersSet := make(map[string]struct{})
+	for path := range pathToHashMap {
+		dir := filepath.Dir(path)
+		candidateFoldersSet[dir] = struct{}{}
+	}
+
+	candidateFolders := make([]string, 0, len(candidateFoldersSet))
+	for dir := range candidateFoldersSet {
+		candidateFolders = append(candidateFolders, dir)
+	}
+
+	// Sort by path depth, descending. This ensures we process children before parents.
+	sort.Slice(candidateFolders, func(i, j int) bool {
+		return strings.Count(candidateFolders[i], string(os.PathSeparator)) > strings.Count(candidateFolders[j], string(os.PathSeparator))
+	})
+
+	// Step 3 & 4: Recursively get signatures and group folders
+	folderSignatureCache := make(map[string]string) // Memoization cache
+	signatureToFoldersMap := make(map[string][]string)
+
+	for _, folderPath := range candidateFolders {
+		signature, isDuplicable := getFolderSignature(folderPath, pathToHashMap, folderSignatureCache)
+		if isDuplicable {
+			signatureToFoldersMap[signature] = append(signatureToFoldersMap[signature], folderPath)
+		}
+	}
+
+	// Step 5: Final filter to remove unique folders
+	for signature, paths := range signatureToFoldersMap {
+		if len(paths) < 2 {
+			delete(signatureToFoldersMap, signature)
+		}
+	}
+
+	return signatureToFoldersMap
+}
+
+// ADD THIS ENTIRE NEW HELPER FUNCTION
+// getFolderSignature is a recursive helper that calculates a canonical signature for a folder.
+// It returns the signature and a boolean indicating if the folder is a candidate for duplication.
+// A folder is NOT a candidate if it contains any unique files or unique sub-folders.
+func getFolderSignature(
+	folderPath string,
+	pathToHashMap map[string]string,
+	folderSignatureCache map[string]string,
+) (string, bool) {
+	// Base Case: If we have already calculated this signature, return it from the cache.
+	if sig, found := folderSignatureCache[folderPath]; found {
+		return sig, true
+	}
+
+	entries, err := os.ReadDir(folderPath)
+	if err != nil {
+		log.Printf("Could not read directory %s: %v", folderPath, err)
+		return "", false // Cannot be a duplicate if we can't read it.
+	}
+
+	var contentItems []string
+
+	for _, entry := range entries {
+		fullPath := filepath.Join(folderPath, entry.Name())
+		if entry.IsDir() {
+			// Recursive step for subdirectory
+			childSignature, childIsDuplicable := getFolderSignature(fullPath, pathToHashMap, folderSignatureCache)
+			if !childIsDuplicable {
+				return "", false // Parent folder contains a unique child, so it's also unique.
+			}
+			// Prefix 'D:' for directory
+			contentItems = append(contentItems, fmt.Sprintf("D:%s:%s", entry.Name(), childSignature))
+		} else {
+			// File step
+			hash, found := pathToHashMap[fullPath]
+			if !found {
+				return "", false // Folder contains a unique file, so it's not a duplicate.
+			}
+			// Prefix 'F:' for file
+			contentItems = append(contentItems, fmt.Sprintf("F:%s:%s", entry.Name(), hash))
+		}
+	}
+
+	// Sort the content items to create a canonical signature, independent of filesystem order.
+	sort.Strings(contentItems)
+	finalSignature := strings.Join(contentItems, ";")
+
+	// Save the result to the cache before returning.
+	folderSignatureCache[folderPath] = finalSignature
+
+	return finalSignature, true
+}
+
 // calculateHash computes the SHA256 hash of a file.
 // If 'partial' is true, it only reads the first PARTIAL_HASH_SIZE bytes.
 func calculateHash(filePath string, partial bool) (string, error) {
@@ -289,8 +418,8 @@ func calculateHash(filePath string, partial bool) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-// printResults displays the final list of duplicate files.
-func printResults(duplicates map[string][]string) {
+// printFileResults displays the final list of duplicate files.
+func printFileResults(duplicates map[string][]string) {
 	if len(duplicates) == 0 {
 		fmt.Println("\n--- No duplicate files found. ---")
 		return
@@ -317,4 +446,74 @@ func printResults(duplicates map[string][]string) {
 	}
 
 	fmt.Printf("\nSummary: Found %d sets of duplicate files. Total wasted space: %d bytes.\n", len(duplicates), totalWastedSpace)
+}
+
+func printFolderResults(duplicates map[string][]string) {
+	if len(duplicates) == 0 {
+		fmt.Println("\n--- No duplicate folders found. ---")
+		return
+	}
+
+	fmt.Println("\n--- Found Duplicate Folders ---")
+	i := 0
+	for signature, paths := range duplicates {
+		i++
+		fmt.Printf("\nSet %d (Folder Signature Hash: %s...):\n", i, signature[:12])
+		for _, path := range paths {
+			fmt.Printf("  - %s\n", path)
+		}
+	}
+}
+
+// filterNestedFolders takes a map of duplicate folders and removes any sets
+// that are subdirectories of another duplicate folder set.
+// For example, if ["/a/src", "/b/src"] is a duplicate set, and
+// ["/a/src/utils", "/b/src/utils"] is another, this function will
+// remove the latter set, keeping only the top-level one.
+func filterNestedFolders(folderDuplicates map[string][]string) map[string][]string {
+	// Step 1: Create a master set of all individual duplicate folder paths for quick lookups.
+	// Using a map[string]struct{} is the idiomatic way to create a set in Go.
+	allDuplicatePaths := make(map[string]struct{})
+	for _, paths := range folderDuplicates {
+		for _, path := range paths {
+			// Clean the path to handle cases like "dir/." vs "dir"
+			cleanedPath := filepath.Clean(path)
+			allDuplicatePaths[cleanedPath] = struct{}{}
+		}
+	}
+
+	// Step 2: Iterate through the original duplicate sets and decide which ones to keep.
+	filteredResults := make(map[string][]string)
+
+	for signature, paths := range folderDuplicates {
+		// We only need to check one path from the set, as all paths in a set
+		// share the same parent-child relationship with other sets.
+		if len(paths) == 0 {
+			continue // Should not happen, but defensive check.
+		}
+		pathToCheck := filepath.Clean(paths[0])
+
+		// Walk upwards from the current path to see if any of its parents
+		// are also in the master set of duplicate folders.
+		isNested := false
+		parent := filepath.Dir(pathToCheck)
+
+		// Loop until we reach the root of the filesystem (e.g., filepath.Dir("/") is "/").
+		for parent != pathToCheck {
+			if _, exists := allDuplicatePaths[parent]; exists {
+				// This folder's parent is also a duplicate. Therefore, this set is nested.
+				isNested = true
+				break // No need to check further up.
+			}
+			pathToCheck = parent
+			parent = filepath.Dir(pathToCheck)
+		}
+
+		// Step 3: If the set was not found to be nested, add it to our final results.
+		if !isNested {
+			filteredResults[signature] = paths
+		}
+	}
+
+	return filteredResults
 }
