@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/status"
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/types"
 )
 
@@ -14,12 +15,10 @@ import (
 func Phase1GroupBySize(RootDir string, NumWorkers int) map[int64][]string {
 	pathsChan := make(chan string, NumWorkers)
 	infoChan := make(chan types.FileInfo, NumWorkers)
+	var processedFiles int64
 
 	// Start a single goroutine to walk the filesystem.
-	// This is the "producer" of file paths.
-
 	go func() {
-
 		defer close(pathsChan)
 		err := filepath.Walk(RootDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -37,7 +36,6 @@ func Phase1GroupBySize(RootDir string, NumWorkers int) map[int64][]string {
 	}()
 
 	// Start a pool of worker goroutines to process paths.
-	// These are the "consumers" that get file stats.
 	var statWg sync.WaitGroup
 	for i := 0; i < NumWorkers; i++ {
 		statWg.Add(1)
@@ -50,6 +48,12 @@ func Phase1GroupBySize(RootDir string, NumWorkers int) map[int64][]string {
 					continue
 				}
 				infoChan <- types.FileInfo{Path: path, Size: info.Size()}
+
+				// Simple progress update every 1000 files
+				if processedFiles++; processedFiles%1000 == 0 {
+					progress := 5.0 + float64(processedFiles%10000)/10000.0*15.0 // Rough estimate 5-20%
+					status.UpdateStatus("phase1", progress, "Scanning files", int(processedFiles), 0)
+				}
 			}
 		}()
 	}

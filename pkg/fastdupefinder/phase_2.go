@@ -7,14 +7,21 @@ import (
 	"sync"
 
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/helpers"
+	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/status"
 )
 
 // Phase2FilterByPartialHash takes the size-grouped map and filters it further
 // by hashing the first few kilobytes of each file.
 func Phase2FilterByPartialHash(FilesBySize map[int64][]string, NumWorkers int) map[string][]string {
-	// A map where the key is a composite "size-partialHash" to avoid collisions.
+	// Count total files to process
+	var totalFiles int
+	for _, paths := range FilesBySize {
+		totalFiles += len(paths)
+	}
+
 	candidates := make(map[string][]string)
-	var mu sync.Mutex // Mutex to protect the candidates map
+	var mu sync.Mutex
+	var processedFiles int
 
 	var wg sync.WaitGroup
 	jobs := make(chan string, NumWorkers)
@@ -28,21 +35,28 @@ func Phase2FilterByPartialHash(FilesBySize map[int64][]string, NumWorkers int) m
 				hash, err := helpers.CalculateHash(path, true) // true for partial hash
 				if err != nil {
 					log.Printf("Error partial hashing file %s: %v\n", path, err)
+					processedFiles++
 					continue
 				}
-				// The composite key includes file size to prevent hash collisions between
-				// files of different sizes.
-				info, _ := os.Stat(path) // We know the file exists, so ignore error
+
+				info, _ := os.Stat(path) // We know the file exists
 				compositeKey := fmt.Sprintf("%d-%s", info.Size(), hash)
 
 				mu.Lock()
 				candidates[compositeKey] = append(candidates[compositeKey], path)
+				processedFiles++
+
+				// Simple progress update every 500 files
+				if processedFiles%500 == 0 {
+					progress := 20.0 + (float64(processedFiles)/float64(totalFiles))*20.0 // 20-40%
+					status.UpdateStatus("phase2", progress, "Computing partial hashes", processedFiles, 0)
+				}
 				mu.Unlock()
 			}
 		}()
 	}
 
-	// Feed the jobs channel with all file paths from the potential duplicate groups.
+	// Feed the jobs channel
 	for _, paths := range FilesBySize {
 		for _, path := range paths {
 			jobs <- path
@@ -52,7 +66,7 @@ func Phase2FilterByPartialHash(FilesBySize map[int64][]string, NumWorkers int) m
 
 	wg.Wait()
 
-	// Filter out groups with only one file.
+	// Filter out groups with only one file
 	for key, paths := range candidates {
 		if len(paths) < 2 {
 			delete(candidates, key)

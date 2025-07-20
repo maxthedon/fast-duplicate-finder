@@ -4,16 +4,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/status"
 )
 
 // Phase5FilterResults takes the results from the previous phases and filters out
 // nested duplicate folders and files that are inside those folders.
 func Phase5FilterResults(folderDuplicates map[string][]string, fileDuplicates map[string][]string) (map[string][]string, map[string][]string) {
+	status.UpdateStatus("phase5", 85.0, "Filtering nested duplicates", len(fileDuplicates), len(folderDuplicates))
 
 	filteredFolderDuplicates := filterNestedFolders(folderDuplicates)
 	filteredFilesInDuplicateFolders := filterFilesWithinDuplicateFolders(fileDuplicates, filteredFolderDuplicates)
 
-	return filteredFolderDuplicates, filteredFilesInDuplicateFolders
+	return filteredFilesInDuplicateFolders, filteredFolderDuplicates
 }
 
 // filterNestedFolders takes a map of duplicate folders and removes any sets

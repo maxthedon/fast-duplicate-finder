@@ -7,11 +7,10 @@ import (
 	"strings"
 
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/helpers"
+	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/status"
 )
 
 // Phase4FindDuplicateFolders identifies duplicate folders based on the file duplicates found.
-// It uses a recursive, bottom-up approach with memoization to generate a signature
-// for each folder based on its contents (files and sub-folders).
 func Phase4FindDuplicateFolders(FileDuplicates map[string][]string) map[string][]string {
 	// Step 1: Create a reverse map for quick hash lookups (path -> hash)
 	pathToHashMap := make(map[string]string)
@@ -33,23 +32,30 @@ func Phase4FindDuplicateFolders(FileDuplicates map[string][]string) map[string][
 		candidateFolders = append(candidateFolders, dir)
 	}
 
-	// Sort by path depth, descending. This ensures we process children before parents.
+	// Sort by path depth, descending
 	sort.Slice(candidateFolders, func(i, j int) bool {
 		return strings.Count(candidateFolders[i], string(os.PathSeparator)) > strings.Count(candidateFolders[j], string(os.PathSeparator))
 	})
 
-	// Step 3 & 4: Recursively get signatures and group folders
-	folderSignatureCache := make(map[string]string) // Memoization cache
+	// Step 3 & 4: Get signatures and group folders
+	folderSignatureCache := make(map[string]string)
 	signatureToFoldersMap := make(map[string][]string)
 
-	for _, folderPath := range candidateFolders {
+	totalFolders := len(candidateFolders)
+	for i, folderPath := range candidateFolders {
+		// Update progress every 100 folders
+		if i%100 == 0 {
+			progress := 60.0 + (float64(i+1)/float64(totalFolders))*20.0 // 60-80%
+			status.UpdateStatus("phase4", progress, "Analyzing folders", len(pathToHashMap), 0)
+		}
+
 		signature, isDuplicable := helpers.GetFolderSignature(folderPath, pathToHashMap, folderSignatureCache)
 		if isDuplicable {
 			signatureToFoldersMap[signature] = append(signatureToFoldersMap[signature], folderPath)
 		}
 	}
 
-	// Step 5: Final filter to remove unique folders
+	// Step 5: Filter unique folders
 	for signature, paths := range signatureToFoldersMap {
 		if len(paths) < 2 {
 			delete(signatureToFoldersMap, signature)
