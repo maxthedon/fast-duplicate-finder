@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder"
+	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/helpers"
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/helpers/output"
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/logger"
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/status"
@@ -12,44 +14,105 @@ import (
 
 // MODIFY THIS FUNCTION
 func main() {
-	// Initialize logger
+	// Parse command line arguments
+	var rootDir string
+	var quietMode bool
+	var jsonMode bool
+	var showProgress bool
+
+	// Simple argument parsing
+	for i, arg := range os.Args[1:] {
+		switch arg {
+		case "--quiet", "-q":
+			quietMode = true
+		case "--json", "-j":
+			jsonMode = true
+		case "--progress", "-p":
+			showProgress = true
+		case "--help", "-h":
+			printUsage()
+			os.Exit(0)
+		default:
+			if i == len(os.Args)-2 || (rootDir == "" && !strings.HasPrefix(arg, "-")) {
+				rootDir = arg
+			}
+		}
+	}
+
+	if rootDir == "" {
+		printUsage()
+		os.Exit(1)
+	}
+
+	// Initialize logger (disable in quiet mode)
 	log := logger.GetLogger()
 	defer log.Stop()
 
-	logger.Info("Fast Dupe Finder started", "Main")
-
-	if len(os.Args) < 2 {
-		fmt.Printf("Usage: %s <directory>\n", os.Args[0])
-		logger.Error("No directory argument provided", "Main")
-		os.Exit(1)
+	if !quietMode {
+		logger.Info("Fast Dupe Finder started", "Main")
 	}
-	rootDir := os.Args[1]
 
 	// Initialize status
 	status.ResetStatus()
 
-	// Add a status callback for demonstration (this will be used later for Flutter integration)
-	status.AddStatusCallback(func(s status.Status) {
-		logger.InfoWithData("Status update received", s, "Main")
-	})
+	// Set up progress display based on mode
+	if showProgress && !quietMode {
+		// CLI progress mode - show progress on stderr
+		status.AddStatusCallback(func(s status.Status) {
+			fmt.Fprintf(os.Stderr, "\r%s [%.1f%%] - %s", s.Phase, s.Progress, s.Message)
+			if s.Phase == "completed" {
+				fmt.Fprintf(os.Stderr, "\n")
+			}
+		})
+	}
 
-	logger.Info("Starting duplicate search for directory: "+rootDir, "Main")
-	status.UpdateStatus("starting", 0.0, "Initializing duplicate finder", 0, 0)
+	if !quietMode {
+		logger.Info("Starting duplicate search for directory: "+rootDir, "Main")
+	}
 
 	filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates, err := fastdupefinder.RunFinder(rootDir)
 	if err != nil {
-		logger.Fatal("Fatal error occurred: "+err.Error(), "Main")
+		if !quietMode {
+			logger.Fatal("Fatal error occurred: "+err.Error(), "Main")
+		}
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
 		os.Exit(1)
 	}
 
-	status.UpdateStatus("completed", 100.0, "Duplicate search completed", len(allFileDuplicates), len(allFolderDuplicates))
-	logger.Info("Duplicate search completed successfully", "Main")
+	if !quietMode {
+		logger.Info("Duplicate search completed successfully", "Main")
+		logger.Info("Application finished", "Main")
+	}
 
-	print(output.StringifyFileResults(filteredFileDuplicates))
-	print(output.StringifyFolderResults(filteredFolderDuplicates))
+	// Output results based on mode
+	if jsonMode {
+		// JSON output mode
+		fmt.Print(output.JSONifyReport(helpers.GenerateReport(filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates)))
+	} else {
+		// Standard text output mode
+		fmt.Print(output.StringifyFileResults(filteredFileDuplicates))
+		fmt.Print(output.StringifyFolderResults(filteredFolderDuplicates))
+	}
+}
 
-	//print(output.JSONifyReport(helpers.GenerateReport(filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates)))
+func printUsage() {
+	fmt.Printf(`Usage: %s [OPTIONS] <directory>
 
-	logger.Info("Application finished", "Main")
+OPTIONS:
+  -q, --quiet     Suppress progress messages and logging
+  -j, --json      Output results in JSON format
+  -p, --progress  Show progress updates on stderr (ignored in quiet mode)
+  -h, --help      Show this help message
 
+EXAMPLES:
+  %s /path/to/scan                    # Basic scan with text output
+  %s -q /path/to/scan                 # Quiet mode for piping
+  %s -p /path/to/scan                 # Show progress updates
+  %s -j /path/to/scan                 # JSON output
+  %s -q -j /path/to/scan              # Quiet JSON mode for scripting
+
+PIPING EXAMPLES:
+  %s -q /path | grep "Set"            # Find only duplicate sets
+  %s -q -j /path | jq .summary        # Extract summary with jq
+`, os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0])
 }
