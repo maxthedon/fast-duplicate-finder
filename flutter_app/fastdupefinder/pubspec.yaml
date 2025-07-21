@@ -44,6 +44,9 @@ dependencies:
   
   # Platform specific operations
   url_launcher: ^6.3.1
+  
+  # FFI for native integration
+  ffi: ^2.0.0
 
 dev_dependencies:
   flutter_test:

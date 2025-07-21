@@ -1,17 +1,25 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import '../models/scan_progress.dart';
 import '../models/scan_result.dart';
 import '../models/scan_report.dart';
+import '../bindings/duplicate_finder_bindings.dart';
 
 class FastDupeFinderService {
   static final FastDupeFinderService _instance = FastDupeFinderService._internal();
   factory FastDupeFinderService() => _instance;
-  FastDupeFinderService._internal();
-
+  
+  late DuplicateFinderBindings _bindings;
   StreamController<ScanProgress>? _progressController;
-  Timer? _mockProgressTimer;
+  Timer? _statusTimer;
   bool _isScanning = false;
   String? _currentScanPath;
+
+  FastDupeFinderService._internal() {
+    _bindings = DuplicateFinderBindings.instance;
+    _bindings.initialize();
+  }
 
   /// Start scan with progress callback
   Future<void> startScan(String rootPath, Function(ScanProgress) onProgress) async {
@@ -23,68 +31,175 @@ class FastDupeFinderService {
     
     _progressController!.stream.listen(onProgress);
 
-    // Mock scanning progress for demo purposes
-    await _simulateScan();
+    // Start status monitoring for real-time progress
+    _startStatusMonitoring();
+
+    try {
+      // Run the actual scan using FFI in a separate isolate to avoid blocking UI
+      await _runScanInBackground(rootPath);
+    } catch (e) {
+      // Handle unexpected errors
+      final errorProgress = ScanProgress(
+        currentPhase: 0,
+        totalPhases: 5,
+        phaseDescription: 'Scan error: $e',
+        processedFiles: 0,
+        progressPercentage: 0.0,
+        isScanning: false,
+        isCompleted: false,
+        isCancelled: false,
+      );
+      _progressController?.add(errorProgress);
+    } finally {
+      _isScanning = false;
+      _stopStatusMonitoring();
+    }
   }
 
-  /// Simulate scanning process with 5 phases
-  Future<void> _simulateScan() async {
-    final phases = [
-      'Directory traversal',
-      'File size grouping', 
-      'Hash calculation',
-      'Duplicate detection',
-      'Report generation'
-    ];
-
-    for (int phase = 1; phase <= 5; phase++) {
-      if (!_isScanning) break; // Check if cancelled
-
-      final phaseDescription = phases[phase - 1];
+  /// Run scan in background and monitor completion
+  Future<void> _runScanInBackground(String rootPath) async {
+    // Start the scan - this will run in the background
+    try {
+      final result = _bindings.scanDirectory(rootPath);
       
-      // Simulate progress within each phase
-      for (int step = 0; step <= 100; step += 2) {
-        if (!_isScanning) break;
-
-        final progress = ScanProgress(
-          currentPhase: phase,
+      // Wait for completion by monitoring status
+      while (_isScanning && _bindings.isScanRunning()) {
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+      
+      if (!_isScanning) return; // Cancelled
+      
+      if (result['success'] == true) {
+        // Scan completed successfully
+        final finalProgress = ScanProgress(
+          currentPhase: 5,
           totalPhases: 5,
-          phaseDescription: phaseDescription,
-          processedFiles: (step * phase * 100).clamp(0, 50000),
-          progressPercentage: ((phase - 1) * 20 + (step * 0.2)) / 100,
-          isScanning: true,
+          phaseDescription: 'Scan completed',
+          processedFiles: result['total_files'] ?? 0,
+          progressPercentage: 1.0,
+          isScanning: false,
+          isCompleted: true,
+          isCancelled: false,
+        );
+        _progressController?.add(finalProgress);
+      } else {
+        // Scan failed
+        final errorProgress = ScanProgress(
+          currentPhase: 0,
+          totalPhases: 5,
+          phaseDescription: 'Scan failed: ${result['error'] ?? 'Unknown error'}',
+          processedFiles: 0,
+          progressPercentage: 0.0,
+          isScanning: false,
           isCompleted: false,
           isCancelled: false,
         );
-
-        _progressController?.add(progress);
-        await Future.delayed(const Duration(milliseconds: 50));
+        _progressController?.add(errorProgress);
       }
-    }
-
-    // Complete the scan
-    if (_isScanning) {
-      final finalProgress = ScanProgress(
-        currentPhase: 5,
+    } catch (e) {
+      final errorProgress = ScanProgress(
+        currentPhase: 0,
         totalPhases: 5,
-        phaseDescription: 'Scan completed',
-        processedFiles: 47523,
-        progressPercentage: 1.0,
+        phaseDescription: 'Scan error: $e',
+        processedFiles: 0,
+        progressPercentage: 0.0,
         isScanning: false,
-        isCompleted: true,
+        isCompleted: false,
         isCancelled: false,
       );
+      _progressController?.add(errorProgress);
+    }
+  }
 
-      _progressController?.add(finalProgress);
+  /// Start monitoring the status from the Go library
+  void _startStatusMonitoring() {
+    _statusTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      if (!_isScanning) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        final status = _bindings.getStatus();
+        final progress = _convertStatusToProgress(status);
+        _progressController?.add(progress);
+      } catch (e) {
+        // Ignore status errors during monitoring
+      }
+    });
+  }
+
+  /// Stop status monitoring
+  void _stopStatusMonitoring() {
+    _statusTimer?.cancel();
+    _statusTimer = null;
+  }
+
+  /// Convert Go status to Flutter ScanProgress
+  ScanProgress _convertStatusToProgress(Map<String, dynamic> status) {
+    final phase = status['phase'] ?? 'idle';
+    final progress = (status['progress'] ?? 0.0).toDouble();
+    final processedFiles = status['processed_files'] ?? 0;
+    
+    // Map Go phase names to Flutter phase descriptions
+    String phaseDescription;
+    int currentPhase;
+    
+    switch (phase) {
+      case 'directory_traversal':
+        phaseDescription = 'Directory traversal';
+        currentPhase = 1;
+        break;
+      case 'file_grouping':
+        phaseDescription = 'File size grouping';
+        currentPhase = 2;
+        break;
+      case 'hash_calculation':
+        phaseDescription = 'Hash calculation';
+        currentPhase = 3;
+        break;
+      case 'duplicate_detection':
+        phaseDescription = 'Duplicate detection';
+        currentPhase = 4;
+        break;
+      case 'report_generation':
+        phaseDescription = 'Report generation';
+        currentPhase = 5;
+        break;
+      case 'completed':
+        phaseDescription = 'Scan completed';
+        currentPhase = 5;
+        break;
+      default:
+        phaseDescription = phase;
+        currentPhase = 1;
     }
 
-    _isScanning = false;
+    return ScanProgress(
+      currentPhase: currentPhase,
+      totalPhases: 5,
+      phaseDescription: phaseDescription,
+      processedFiles: processedFiles,
+      progressPercentage: progress,
+      isScanning: phase != 'completed' && phase != 'idle',
+      isCompleted: phase == 'completed',
+      isCancelled: false,
+    );
   }
 
   /// Cancel running scan
   Future<void> cancelScan() async {
     _isScanning = false;
-    _mockProgressTimer?.cancel();
+    _stopStatusMonitoring();
+    
+    // Try to cancel the scan in the Go library if it's running
+    try {
+      // Note: The current Go library doesn't have a cancel function
+      // This would need to be implemented in the Go C bindings if needed
+      // For now, we just stop our monitoring and mark as cancelled
+    } catch (e) {
+      print('Error cancelling scan: $e');
+    }
     
     if (_progressController != null) {
       final cancelledProgress = ScanProgress(
@@ -104,85 +219,145 @@ class FastDupeFinderService {
     }
   }
 
-  /// Get final results (mock data for demo)
+  /// Get final results (from Go library)
   Future<ScanResult> getResults() async {
     if (_currentScanPath == null) {
       return ScanResult.empty;
     }
 
-    // Generate mock duplicate groups
-    final duplicateGroups = [
-      DuplicateGroup(
-        id: '1',
-        fileName: 'vacation_photos',
-        filePaths: [
-          '$_currentScanPath/Pictures/vacation_photos',
-          '$_currentScanPath/Backup/vacation_photos',
-          '$_currentScanPath/Desktop/vacation_photos_copy',
-        ],
-        fileSize: 471859200, // 450 MB
-        duplicateCount: 3,
-        type: FileType.folder,
-      ),
-      DuplicateGroup(
-        id: '2', 
-        fileName: 'document.pdf',
-        filePaths: [
-          '$_currentScanPath/Documents/document.pdf',
-          '$_currentScanPath/Downloads/document.pdf',
-        ],
-        fileSize: 15728640, // 15 MB
-        duplicateCount: 2,
-        type: FileType.file,
-      ),
-      DuplicateGroup(
-        id: '3',
-        fileName: 'music_collection',
-        filePaths: [
-          '$_currentScanPath/Music/music_collection',
-          '$_currentScanPath/External/music_collection',
-          '$_currentScanPath/Backup/old/music_collection',
-          '$_currentScanPath/Archive/music_collection',
-        ],
-        fileSize: 2147483648, // 2 GB
-        duplicateCount: 4,
-        type: FileType.folder,
-      ),
-    ];
+    try {
+      // Get the scan result from the Go library
+      final result = _bindings.scanDirectory(_currentScanPath!);
+      
+      if (result['success'] != true) {
+        return ScanResult.empty;
+      }
 
-    final totalWastedSpace = duplicateGroups.fold<int>(
-      0,
-      (sum, group) => sum + (group.fileSize * (group.duplicateCount - 1)),
-    );
+      // Parse the JSON result from Go
+      final reportString = result['report'];
+      if (reportString == null || reportString is! String) {
+        return ScanResult.empty;
+      }
 
-    return ScanResult(
-      duplicateGroups: duplicateGroups,
-      totalDuplicates: duplicateGroups.length,
-      totalWastedSpace: totalWastedSpace,
-      scanCompletedAt: DateTime.now(),
-      scannedPath: _currentScanPath!,
-    );
+      final report = jsonDecode(reportString) as Map<String, dynamic>;
+      
+      // Convert Go duplicate groups to Flutter models
+      final duplicateGroups = <DuplicateGroup>[];
+      
+      // Process file duplicates
+      final fileDuplicates = report['fileDuplicates'];
+      if (fileDuplicates != null && fileDuplicates['sets'] != null) {
+        final fileSets = List<Map<String, dynamic>>.from(fileDuplicates['sets']);
+        
+        for (int i = 0; i < fileSets.length; i++) {
+          final fileSet = fileSets[i];
+          final paths = List<String>.from(fileSet['paths'] ?? []);
+          final sizeBytes = fileSet['sizeBytes'] ?? 0;
+          
+          if (paths.length > 1) {
+            final duplicateGroup = DuplicateGroup(
+              id: 'file_${i + 1}',
+              fileName: paths.first.split('/').last,
+              filePaths: paths,
+              fileSize: sizeBytes is int ? sizeBytes : (sizeBytes as num).toInt(),
+              duplicateCount: paths.length,
+              type: FileType.file,
+            );
+            duplicateGroups.add(duplicateGroup);
+          }
+        }
+      }
+      
+      // Process folder duplicates
+      final folderDuplicates = report['folderDuplicates'];
+      if (folderDuplicates != null && folderDuplicates['sets'] != null) {
+        final folderSets = List<Map<String, dynamic>>.from(folderDuplicates['sets']);
+        
+        for (int i = 0; i < folderSets.length; i++) {
+          final folderSet = folderSets[i];
+          final paths = List<String>.from(folderSet['paths'] ?? []);
+          
+          if (paths.length > 1) {
+            final duplicateGroup = DuplicateGroup(
+              id: 'folder_${i + 1}',
+              fileName: paths.first.split('/').last,
+              filePaths: paths,
+              fileSize: 0, // Folders don't have a direct size in the report
+              duplicateCount: paths.length,
+              type: FileType.folder,
+            );
+            duplicateGroups.add(duplicateGroup);
+          }
+        }
+      }
+
+      // Get total wasted space from summary
+      final summary = report['summary'];
+      final totalWastedSpace = summary != null ? (summary['wastedSpaceBytes'] ?? 0) : 0;
+
+      return ScanResult(
+        duplicateGroups: duplicateGroups,
+        totalDuplicates: duplicateGroups.length,
+        totalWastedSpace: totalWastedSpace is int ? totalWastedSpace : (totalWastedSpace as num).toInt(),
+        scanCompletedAt: DateTime.now(),
+        scannedPath: _currentScanPath!,
+      );
+    } catch (e) {
+      print('Error getting results: $e');
+      return ScanResult.empty;
+    }
   }
 
-  /// Delete files/folders (mock implementation)
+  /// Delete files/folders 
   Future<bool> deleteItems(List<String> paths) async {
-    // Mock delay for deletion
-    await Future.delayed(const Duration(seconds: 1));
-    
-    // In real implementation, this would delete the actual files
-    // For now, just return success
-    return true;
+    try {
+      for (String path in paths) {
+        final fileEntity = File(path);
+        final dirEntity = Directory(path);
+        
+        if (await fileEntity.exists()) {
+          await fileEntity.delete();
+        } else if (await dirEntity.exists()) {
+          await dirEntity.delete(recursive: true);
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      print('Error deleting items: $e');
+      return false;
+    }
   }
 
   /// Open file in system explorer
   Future<void> showInExplorer(String path) async {
-    // Mock implementation - in real app this would open the system file explorer
-    // This would use platform channels or url_launcher
-    print('Opening in explorer: $path');
+    try {
+      String command;
+      List<String> arguments;
+      
+      if (Platform.isLinux) {
+        command = 'xdg-open';
+        arguments = [File(path).parent.path];
+      } else if (Platform.isWindows) {
+        command = 'explorer';
+        arguments = ['/select,', path];
+      } else if (Platform.isMacOS) {
+        command = 'open';
+        arguments = ['-R', path];
+      } else {
+        print('Platform not supported for showing in explorer');
+        return;
+      }
+      
+      await Process.run(command, arguments);
+    } catch (e) {
+      print('Error opening in explorer: $e');
+    }
   }
 
   void dispose() {
     _progressController?.close();
-    _mockProgressTimer?.cancel();
+    _stopStatusMonitoring();
+    _bindings.dispose();
   }
 }
