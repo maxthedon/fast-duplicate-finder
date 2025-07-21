@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import '../models/scan_progress.dart';
 import '../models/scan_result.dart';
 import '../models/scan_report.dart';
@@ -56,34 +57,32 @@ class FastDupeFinderService {
     }
   }
 
-  /// Run scan in background and monitor completion
+  /// Run scan in background isolate to avoid blocking UI
   Future<void> _runScanInBackground(String rootPath) async {
-    // Start the scan - this will run in the background
     try {
-      final result = _bindings.scanDirectory(rootPath);
+      // Run the FFI call in a separate isolate to avoid blocking the UI
+      final result = await _runScanInIsolate(rootPath);
       
       // Wait for completion by monitoring status
       while (_isScanning && _bindings.isScanRunning()) {
-        await Future.delayed(const Duration(milliseconds: 250));
+        await Future.delayed(const Duration(milliseconds: 100));
       }
       
       if (!_isScanning) return; // Cancelled
       
       if (result['success'] == true) {
-        // Scan completed successfully
         final finalProgress = ScanProgress(
           currentPhase: 5,
           totalPhases: 5,
           phaseDescription: 'Scan completed',
-          processedFiles: result['total_files'] ?? 0,
-          progressPercentage: 1.0,
+          processedFiles: result['processed_files'] ?? 0,
+          progressPercentage: 100.0,
           isScanning: false,
           isCompleted: true,
           isCancelled: false,
         );
         _progressController?.add(finalProgress);
       } else {
-        // Scan failed
         final errorProgress = ScanProgress(
           currentPhase: 0,
           totalPhases: 5,
@@ -100,7 +99,7 @@ class FastDupeFinderService {
       final errorProgress = ScanProgress(
         currentPhase: 0,
         totalPhases: 5,
-        phaseDescription: 'Scan error: $e',
+        phaseDescription: 'Scan failed: $e',
         processedFiles: 0,
         progressPercentage: 0.0,
         isScanning: false,
@@ -108,6 +107,48 @@ class FastDupeFinderService {
         isCancelled: false,
       );
       _progressController?.add(errorProgress);
+    }
+  }
+
+  /// Run the actual FFI scan in a separate isolate
+  Future<Map<String, dynamic>> _runScanInIsolate(String rootPath) async {
+    final receivePort = ReceivePort();
+    
+    try {
+      await Isolate.spawn(_scanIsolateEntryPoint, {
+        'sendPort': receivePort.sendPort,
+        'rootPath': rootPath,
+      });
+      
+      final result = await receivePort.first as Map<String, dynamic>;
+      return result;
+    } catch (e) {
+      return {'success': false, 'error': 'Isolate error: $e'};
+    } finally {
+      receivePort.close();
+    }
+  }
+
+  /// Isolate entry point for running the scan
+  static void _scanIsolateEntryPoint(Map<String, dynamic> params) {
+    final sendPort = params['sendPort'] as SendPort;
+    final rootPath = params['rootPath'] as String;
+    
+    try {
+      // Initialize bindings in the isolate
+      final bindings = DuplicateFinderBindings.instance;
+      bindings.initialize();
+      
+      // Run the actual scan
+      final result = bindings.scanDirectory(rootPath);
+      
+      // Send result back to main isolate
+      sendPort.send(result);
+    } catch (e) {
+      sendPort.send({
+        'success': false,
+        'error': 'FFI error: $e',
+      });
     }
   }
 
@@ -219,51 +260,102 @@ class FastDupeFinderService {
     }
   }
 
-  /// Get final results (from Go library)
+  /// Get final results (from Go library) using isolate
   Future<ScanResult> getResults() async {
     if (_currentScanPath == null) {
       return ScanResult.empty;
     }
 
     try {
-      // Get the scan result from the Go library
-      final result = _bindings.scanDirectory(_currentScanPath!);
+      // Get the scan result from the Go library using isolate
+      final result = await _runScanInIsolate(_currentScanPath!);
       
       if (result['success'] != true) {
+        print('Scan failed: ${result['error']}');
         return ScanResult.empty;
       }
 
       // Parse the JSON result from Go
       final reportString = result['report'];
       if (reportString == null || reportString is! String) {
+        print('No report data found');
+        print('Result keys: ${result.keys}');
+        print('Report value type: ${reportString.runtimeType}');
+        print('Report value: $reportString');
         return ScanResult.empty;
       }
 
+      print('=== DEBUG: Raw JSON Report ===');
+      print('Report length: ${reportString.length}');
+      print('First 500 chars: ${reportString.substring(0, reportString.length > 500 ? 500 : reportString.length)}');
+      
       final report = jsonDecode(reportString) as Map<String, dynamic>;
+      print('=== DEBUG: Parsed Report Structure ===');
+      print('Report keys: ${report.keys}');
+      if (report['summary'] != null) {
+        print('Summary: ${report['summary']}');
+      }
+      if (report['fileDuplicates'] != null) {
+        final fileDups = report['fileDuplicates'];
+        print('File duplicates structure: ${fileDups.keys}');
+        if (fileDups['sets'] != null) {
+          print('File sets count: ${(fileDups['sets'] as List).length}');
+        }
+      }
+      if (report['folderDuplicates'] != null) {
+        final folderDups = report['folderDuplicates'];
+        print('Folder duplicates structure: ${folderDups.keys}');
+        if (folderDups['sets'] != null) {
+          print('Folder sets count: ${(folderDups['sets'] as List).length}');
+        }
+      }
       
       // Convert Go duplicate groups to Flutter models
       final duplicateGroups = <DuplicateGroup>[];
       
       // Process file duplicates
       final fileDuplicates = report['fileDuplicates'];
+      print('=== DEBUG: Processing File Duplicates ===');
+      print('fileDuplicates is null: ${fileDuplicates == null}');
+      if (fileDuplicates != null) {
+        print('fileDuplicates type: ${fileDuplicates.runtimeType}');
+        print('fileDuplicates keys: ${fileDuplicates.keys}');
+        final sets = fileDuplicates['sets'];
+        print('sets is null: ${sets == null}');
+        if (sets != null) {
+          print('sets type: ${sets.runtimeType}');
+          final setsList = sets as List;
+          print('sets length: ${setsList.length}');
+          if (setsList.isNotEmpty) {
+            print('First set: ${setsList[0]}');
+          }
+        }
+      }
+      
       if (fileDuplicates != null && fileDuplicates['sets'] != null) {
-        final fileSets = List<Map<String, dynamic>>.from(fileDuplicates['sets']);
-        
-        for (int i = 0; i < fileSets.length; i++) {
-          final fileSet = fileSets[i];
-          final paths = List<String>.from(fileSet['paths'] ?? []);
-          final sizeBytes = fileSet['sizeBytes'] ?? 0;
+        final sets = fileDuplicates['sets'] as List<dynamic>;
+        print('Processing ${sets.length} file duplicate sets');
+        for (int i = 0; i < sets.length; i++) {
+          final set = sets[i] as Map<String, dynamic>;
+          print('Processing file set $i: ${set.keys}');
+          final paths = (set['paths'] as List<dynamic>)
+              .map((path) => path as String)
+              .toList();
           
           if (paths.length > 1) {
-            final duplicateGroup = DuplicateGroup(
-              id: 'file_${i + 1}',
-              fileName: paths.first.split('/').last,
+            final fileName = paths.first.split('/').last;
+            final fileSize = set['sizeBytes'] as int;
+            print('Adding duplicate group: $fileName (${paths.length} copies, $fileSize bytes)');
+            
+            duplicateGroups.add(DuplicateGroup(
+              id: 'file_$i',
+              fileName: fileName,
               filePaths: paths,
-              fileSize: sizeBytes is int ? sizeBytes : (sizeBytes as num).toInt(),
+              fileSize: fileSize,
               duplicateCount: paths.length,
               type: FileType.file,
-            );
-            duplicateGroups.add(duplicateGroup);
+              isSelected: false,
+            ));
           }
         }
       }
@@ -271,34 +363,37 @@ class FastDupeFinderService {
       // Process folder duplicates
       final folderDuplicates = report['folderDuplicates'];
       if (folderDuplicates != null && folderDuplicates['sets'] != null) {
-        final folderSets = List<Map<String, dynamic>>.from(folderDuplicates['sets']);
-        
-        for (int i = 0; i < folderSets.length; i++) {
-          final folderSet = folderSets[i];
-          final paths = List<String>.from(folderSet['paths'] ?? []);
+        final sets = folderDuplicates['sets'] as List<dynamic>;
+        for (int i = 0; i < sets.length; i++) {
+          final set = sets[i] as Map<String, dynamic>;
+          final paths = (set['paths'] as List<dynamic>)
+              .map((path) => path as String)
+              .toList();
           
           if (paths.length > 1) {
-            final duplicateGroup = DuplicateGroup(
-              id: 'folder_${i + 1}',
-              fileName: paths.first.split('/').last,
+            final folderName = paths.first.split('/').last;
+            
+            duplicateGroups.add(DuplicateGroup(
+              id: 'folder_$i',
+              fileName: folderName,
               filePaths: paths,
-              fileSize: 0, // Folders don't have a direct size in the report
+              fileSize: 0, // Folders don't have direct size in the current JSON structure
               duplicateCount: paths.length,
               type: FileType.folder,
-            );
-            duplicateGroups.add(duplicateGroup);
+              isSelected: false,
+            ));
           }
         }
       }
 
       // Get total wasted space from summary
       final summary = report['summary'];
-      final totalWastedSpace = summary != null ? (summary['wastedSpaceBytes'] ?? 0) : 0;
+      final totalWastedSpace = summary != null ? (summary['wastedSpaceBytes'] as int? ?? 0) : 0;
 
       return ScanResult(
         duplicateGroups: duplicateGroups,
         totalDuplicates: duplicateGroups.length,
-        totalWastedSpace: totalWastedSpace is int ? totalWastedSpace : (totalWastedSpace as num).toInt(),
+        totalWastedSpace: totalWastedSpace,
         scanCompletedAt: DateTime.now(),
         scannedPath: _currentScanPath!,
       );
