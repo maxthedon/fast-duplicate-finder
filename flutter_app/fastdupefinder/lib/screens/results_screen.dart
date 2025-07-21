@@ -70,7 +70,7 @@ class ResultsScreen extends StatelessWidget {
               // Header with summary
               Container(
                 padding: const EdgeInsets.all(24),
-                color: Theme.of(context).colorScheme.surfaceVariant,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -266,7 +266,7 @@ class _DuplicateGroupCard extends StatelessWidget {
             Container(
               height: 8,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: FractionallySizedBox(
