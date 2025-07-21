@@ -259,11 +259,9 @@ class FastDupeFinderService {
     _isScanning = false;
     _stopStatusMonitoring();
     
-    // Try to cancel the scan in the Go library if it's running
+    // Cancel the scan in the Go library
     try {
-      // Note: The current Go library doesn't have a cancel function
-      // This would need to be implemented in the Go C bindings if needed
-      // For now, we just stop our monitoring and mark as cancelled
+      _bindings.cancelCurrentScan();
     } catch (e) {
       print('Error cancelling scan: $e');
     }
@@ -289,84 +287,42 @@ class FastDupeFinderService {
     }
   }
 
-  /// Get final results (from Go library) using isolate
+  /// Get final results (from Go library) - no need to run scan again
   Future<ScanResult> getResults() async {
     if (_currentScanPath == null) {
       return ScanResult.empty;
     }
 
     try {
-      // Get the scan result from the Go library using isolate
-      final result = await _runScanInIsolate(_currentScanPath!);
+      // Get the cached report from the Go library 
+      final reportString = _bindings.getLastScanReport();
       
-      if (result['success'] != true) {
-        print('Scan failed: ${result['error']}');
+      if (reportString.isEmpty || reportString.contains('"error"')) {
+        print('No cached results available: $reportString');
         return ScanResult.empty;
       }
 
-      // Parse the JSON result from Go
-      final reportString = result['report'];
-      if (reportString == null || reportString is! String) {
-        print('No report data found');
-        print('Result keys: ${result.keys}');
-        print('Report value type: ${reportString.runtimeType}');
-        print('Report value: $reportString');
-        return ScanResult.empty;
-      }
+      return _parseReportFromJson(reportString);
+    } catch (e) {
+      print('Error getting results: $e');
+      return ScanResult.empty;
+    }
+  }
 
-      print('=== DEBUG: Raw JSON Report ===');
-      print('Report length: ${reportString.length}');
-      print('First 500 chars: ${reportString.substring(0, reportString.length > 500 ? 500 : reportString.length)}');
-      
+  /// Parse the report JSON string into a ScanResult
+  ScanResult _parseReportFromJson(String reportString) {
+    try {
       final report = jsonDecode(reportString) as Map<String, dynamic>;
-      print('=== DEBUG: Parsed Report Structure ===');
-      print('Report keys: ${report.keys}');
-      if (report['summary'] != null) {
-        print('Summary: ${report['summary']}');
-      }
-      if (report['fileDuplicates'] != null) {
-        final fileDups = report['fileDuplicates'];
-        print('File duplicates structure: ${fileDups.keys}');
-        if (fileDups['sets'] != null) {
-          print('File sets count: ${(fileDups['sets'] as List).length}');
-        }
-      }
-      if (report['folderDuplicates'] != null) {
-        final folderDups = report['folderDuplicates'];
-        print('Folder duplicates structure: ${folderDups.keys}');
-        if (folderDups['sets'] != null) {
-          print('Folder sets count: ${(folderDups['sets'] as List).length}');
-        }
-      }
       
       // Convert Go duplicate groups to Flutter models
       final duplicateGroups = <DuplicateGroup>[];
       
       // Process file duplicates
       final fileDuplicates = report['fileDuplicates'];
-      print('=== DEBUG: Processing File Duplicates ===');
-      print('fileDuplicates is null: ${fileDuplicates == null}');
-      if (fileDuplicates != null) {
-        print('fileDuplicates type: ${fileDuplicates.runtimeType}');
-        print('fileDuplicates keys: ${fileDuplicates.keys}');
-        final sets = fileDuplicates['sets'];
-        print('sets is null: ${sets == null}');
-        if (sets != null) {
-          print('sets type: ${sets.runtimeType}');
-          final setsList = sets as List;
-          print('sets length: ${setsList.length}');
-          if (setsList.isNotEmpty) {
-            print('First set: ${setsList[0]}');
-          }
-        }
-      }
-      
       if (fileDuplicates != null && fileDuplicates['sets'] != null) {
         final sets = fileDuplicates['sets'] as List<dynamic>;
-        print('Processing ${sets.length} file duplicate sets');
         for (int i = 0; i < sets.length; i++) {
           final set = sets[i] as Map<String, dynamic>;
-          print('Processing file set $i: ${set.keys}');
           final paths = (set['paths'] as List<dynamic>)
               .map((path) => path as String)
               .toList();
@@ -374,7 +330,6 @@ class FastDupeFinderService {
           if (paths.length > 1) {
             final fileName = paths.first.split('/').last;
             final fileSize = set['sizeBytes'] as int;
-            print('Adding duplicate group: $fileName (${paths.length} copies, $fileSize bytes)');
             
             duplicateGroups.add(DuplicateGroup(
               id: 'file_$i',
@@ -406,7 +361,7 @@ class FastDupeFinderService {
               id: 'folder_$i',
               fileName: folderName,
               filePaths: paths,
-              fileSize: 0, // Folders don't have direct size in the current JSON structure
+              fileSize: 0,
               duplicateCount: paths.length,
               type: FileType.folder,
               isSelected: false,
@@ -427,7 +382,7 @@ class FastDupeFinderService {
         scannedPath: _currentScanPath!,
       );
     } catch (e) {
-      print('Error getting results: $e');
+      print('Error parsing report JSON: $e');
       return ScanResult.empty;
     }
   }

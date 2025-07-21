@@ -31,6 +31,12 @@ typedef SetStatusCallbackCDart = void Function(ffi.Pointer<ffi.NativeFunction<ff
 typedef RemoveStatusCallbackCNative = ffi.Void Function();
 typedef RemoveStatusCallbackCDart = void Function();
 
+typedef CancelScanCNative = ffi.Void Function();
+typedef CancelScanCDart = void Function();
+
+typedef GetLastReportCNative = ffi.Pointer<ffi.Char> Function();
+typedef GetLastReportCDart = ffi.Pointer<ffi.Char> Function();
+
 class DuplicateFinderBindings {
   static DuplicateFinderBindings? _instance;
   late ffi.DynamicLibrary _dylib;
@@ -45,6 +51,8 @@ class DuplicateFinderBindings {
   late IsRunningCDart isRunning;
   late SetStatusCallbackCDart setStatusCallback;
   late RemoveStatusCallbackCDart removeStatusCallback;
+  late CancelScanCDart cancelScan;
+  late GetLastReportCDart getLastReport;
 
   DuplicateFinderBindings._internal() {
     _loadLibrary();
@@ -100,6 +108,8 @@ class DuplicateFinderBindings {
     isRunning = _dylib.lookupFunction<IsRunningCNative, IsRunningCDart>('IsRunningC');
     setStatusCallback = _dylib.lookupFunction<SetStatusCallbackCNative, SetStatusCallbackCDart>('SetStatusCallbackC');
     removeStatusCallback = _dylib.lookupFunction<RemoveStatusCallbackCNative, RemoveStatusCallbackCDart>('RemoveStatusCallbackC');
+    cancelScan = _dylib.lookupFunction<CancelScanCNative, CancelScanCDart>('CancelScanC');
+    getLastReport = _dylib.lookupFunction<GetLastReportCNative, GetLastReportCDart>('GetLastReportC');
   }
 
   String _convertCString(ffi.Pointer<ffi.Char> ptr) {
@@ -176,5 +186,14 @@ class DuplicateFinderBindings {
 
   void dispose() {
     removeStatusCallback();
+  }
+
+  void cancelCurrentScan() {
+    cancelScan();
+  }
+
+  String getLastScanReport() {
+    final reportPtr = getLastReport();
+    return _convertCString(reportPtr);
   }
 }

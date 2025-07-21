@@ -92,6 +92,8 @@ extern char* RunDuplicateFinderMobileC(char* rootDir, int maxWorkers, int reduce
 extern char* GetMobileConfigC();
 extern char* GetLastErrorC();
 extern int IsRunningC();
+extern void CancelScanC();
+extern char* GetLastReportC();
 
 #ifdef __cplusplus
 }

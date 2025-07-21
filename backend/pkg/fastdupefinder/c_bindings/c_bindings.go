@@ -140,6 +140,22 @@ func IsRunningC() C.int {
 	return 1 // Running
 }
 
+//export CancelScanC
+func CancelScanC() {
+	// Set the cancellation flag in phase 5
+	// This is a new function that needs to be exposed
+	if IsRunningC() != 0 {
+		// Import the phase 5 package function to set cancelled
+		library.CancelCurrentScan()
+	}
+}
+
+//export GetLastReportC
+func GetLastReportC() *C.char {
+	result := library.GetLastReport()
+	return C.CString(result)
+}
+
 // C callback helper function - this will be implemented on the C side
 // but we need to declare it here for Go to call it
 func callCStatusCallback(callback unsafe.Pointer, status *C.char) {

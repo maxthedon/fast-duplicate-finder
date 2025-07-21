@@ -22,6 +22,7 @@ type DuplicateFinderResult struct {
 type StatusCallback func(statusJSON string)
 
 var globalStatusCallback StatusCallback
+var lastReport string // Cache the last report JSON
 
 // SetStatusCallback sets the global status callback function
 // This function will be called by the C binding layer
@@ -70,6 +71,7 @@ func RunDuplicateFinder(rootDir string) string {
 		} else {
 			result.Success = true
 			result.Report = string(reportJSON)
+			lastReport = string(reportJSON) // Cache the report
 			logger.Info("Duplicate finder completed successfully", "Library")
 		}
 	}
@@ -116,6 +118,20 @@ func GetLogs(count int) string {
 func ClearLogs() {
 	logger.GetLogger().ClearEntries()
 	logger.Info("Logs cleared", "Library")
+}
+
+// CancelCurrentScan cancels the currently running scan
+func CancelCurrentScan() {
+	fastdupefinder.SetCancelled(true)
+	logger.Info("Scan cancellation requested", "Library")
+}
+
+// GetLastReport returns the cached report from the last successful scan
+func GetLastReport() string {
+	if lastReport == "" {
+		return `{"error": "No report available"}`
+	}
+	return lastReport
 }
 
 // GetVersion returns the version information

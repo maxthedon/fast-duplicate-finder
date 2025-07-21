@@ -3,17 +3,51 @@ package fastdupefinder
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/status"
 )
 
+// Global cancellation flag
+var scanCancelled bool
+var cancelMutex sync.RWMutex
+
+// SetCancelled sets the cancellation flag
+func SetCancelled(cancelled bool) {
+	cancelMutex.Lock()
+	defer cancelMutex.Unlock()
+	scanCancelled = cancelled
+}
+
+// IsCancelled checks if scan is cancelled
+func IsCancelled() bool {
+	cancelMutex.RLock()
+	defer cancelMutex.RUnlock()
+	return scanCancelled
+}
+
 // Phase5FilterResults takes the results from the previous phases and filters out
 // nested duplicate folders and files that are inside those folders.
 func Phase5FilterResults(folderDuplicates map[string][]string, fileDuplicates map[string][]string) (map[string][]string, map[string][]string) {
+	// Update progress with minimal logging
 	status.UpdateDetailedStatus("phase5", 85.0, "Filtering nested duplicates", len(fileDuplicates), len(folderDuplicates), 0, len(fileDuplicates)+len(folderDuplicates), "Duplicates")
 
+	// Check for cancellation early
+	if IsCancelled() {
+		return make(map[string][]string), make(map[string][]string)
+	}
+
+	// Filter folders first
 	filteredFolderDuplicates := filterNestedFolders(folderDuplicates)
+
+	// Check for cancellation before processing files
+	if IsCancelled() {
+		return make(map[string][]string), make(map[string][]string)
+	}
+
+	// Filter files using the filtered folders
 	filteredFilesInDuplicateFolders := filterFilesWithinDuplicateFolders(fileDuplicates, filteredFolderDuplicates)
 
 	return filteredFilesInDuplicateFolders, filteredFolderDuplicates
@@ -100,34 +134,99 @@ func filterFilesWithinDuplicateFolders(
 	}
 
 	// Step 2: Build the new map of file duplicates, excluding the nested files.
+	// Use goroutines to process in parallel for better performance
 	finalFileDuplicates := make(map[string][]string)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-	for hash, paths := range fileDuplicates {
-		// For each group of duplicate files, create a new list containing only
-		// the files that are NOT located inside one of the duplicate folders.
-		var keptPaths []string
+	// Convert map keys to slice for easier distribution
+	hashes := make([]string, 0, len(fileDuplicates))
+	for hash := range fileDuplicates {
+		hashes = append(hashes, hash)
+	}
 
-		for _, filePath := range paths {
-			isNested := false
-			// Check if the file's path starts with any of the duplicate folder paths.
-			for folderPrefix := range duplicateFolderSet {
-				if strings.HasPrefix(filePath, folderPrefix) {
-					isNested = true
-					break // The file is inside a duplicate folder; no need to check others.
+	// Use more workers for better performance, but limit to avoid overwhelming the system
+	numWorkers := runtime.NumCPU()
+	if numWorkers > len(hashes) {
+		numWorkers = len(hashes) // Don't create more workers than we have work
+	}
+	if numWorkers > 8 {
+		numWorkers = 8 // Cap at 8 workers to avoid too much overhead
+	}
+	if numWorkers == 0 {
+		numWorkers = 1
+	}
+
+	// Create work channel
+	hashChan := make(chan string, numWorkers*2) // Buffered channel for better performance
+
+	// Send all hashes to the channel
+	go func() {
+		defer close(hashChan)
+		for _, hash := range hashes {
+			if IsCancelled() {
+				return
+			}
+			hashChan <- hash
+		}
+	}()
+
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			localResults := make(map[string][]string)
+
+			for hash := range hashChan {
+				// Check for cancellation periodically
+				if IsCancelled() {
+					return
+				}
+
+				paths := fileDuplicates[hash]
+				var keptPaths []string
+
+				// Filter out files that are inside duplicate folders
+				for _, filePath := range paths {
+					isNested := false
+					// Check if the file's path starts with any of the duplicate folder paths.
+					for folderPrefix := range duplicateFolderSet {
+						if strings.HasPrefix(filePath, folderPrefix) {
+							isNested = true
+							break // The file is inside a duplicate folder; no need to check others.
+						}
+					}
+
+					// If the file is not nested within any duplicate folder, add it to our list.
+					if !isNested {
+						keptPaths = append(keptPaths, filePath)
+					}
+				}
+
+				// After filtering, if the group still has more than one file,
+				// it's still a valid set of duplicates. Add it to the local results.
+				if len(keptPaths) > 1 {
+					localResults[hash] = keptPaths
 				}
 			}
 
-			// If the file is not nested within any duplicate folder, add it to our list.
-			if !isNested {
-				keptPaths = append(keptPaths, filePath)
+			// Merge local results with final results (less frequent locking)
+			if len(localResults) > 0 {
+				mu.Lock()
+				for hash, paths := range localResults {
+					finalFileDuplicates[hash] = paths
+				}
+				mu.Unlock()
 			}
-		}
+		}()
+	}
 
-		// Step 3: After filtering, if the group still has more than one file,
-		// it's still a valid set of duplicates. Add it to the final results.
-		if len(keptPaths) > 1 {
-			finalFileDuplicates[hash] = keptPaths
-		}
+	wg.Wait()
+
+	// Check for cancellation one final time
+	if IsCancelled() {
+		return make(map[string][]string)
 	}
 
 	return finalFileDuplicates
