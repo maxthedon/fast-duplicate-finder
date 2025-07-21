@@ -17,7 +17,7 @@ class ScanProvider extends ChangeNotifier {
   ScanResult? get scanResult => _scanResult;
   bool get isScanning => _isScanning;
   bool get canStartScan => _selectedPath != null && !_isScanning;
-  bool get hasResults => _scanResult != null && _scanResult!.duplicateGroups.isNotEmpty;
+  bool get hasResults => _scanResult != null;
 
   // Methods
   void setSelectedPath(String? path) {
@@ -36,12 +36,12 @@ class ScanProvider extends ChangeNotifier {
     try {
       await _service.startScan(_selectedPath!, (progress) {
         _currentProgress = progress;
-        _isScanning = progress.isScanning;
+        _isScanning = progress.isScanning || progress.isGeneratingReport;
         notifyListeners();
 
-        // If scan is completed, get results
-        if (progress.isCompleted) {
-          _loadResults();
+        // When scan is fully completed (not generating report anymore), get results
+        if (progress.isCompleted && !progress.isGeneratingReport && !progress.isCancelled) {
+          _getResults();
         }
       });
     } catch (e) {
@@ -54,12 +54,14 @@ class ScanProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadResults() async {
+  Future<void> _getResults() async {
     try {
+      // Get the final results from the service
       _scanResult = await _service.getResults();
       notifyListeners();
     } catch (e) {
-      print('Error loading results: $e');
+      print('Error getting scan results: $e');
+      // Results might not be available yet, but that's handled by the service
     }
   }
 

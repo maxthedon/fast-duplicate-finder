@@ -7,6 +7,7 @@ class ScanProgress {
   final bool isScanning;
   final bool isCompleted;
   final bool isCancelled;
+  final bool isGeneratingReport;
   final int duplicatesFound;
   final int currentItem;
   final int totalItems;
@@ -20,6 +21,7 @@ class ScanProgress {
     required this.isScanning,
     required this.isCompleted,
     required this.isCancelled,
+    this.isGeneratingReport = false,
     this.duplicatesFound = 0,
     this.currentItem = 0,
     this.totalItems = 0,
@@ -34,6 +36,7 @@ class ScanProgress {
     isScanning: false,
     isCompleted: false,
     isCancelled: false,
+    isGeneratingReport: false,
     duplicatesFound: 0,
     currentItem: 0,
     totalItems: 0,
@@ -48,6 +51,7 @@ class ScanProgress {
     bool? isScanning,
     bool? isCompleted,
     bool? isCancelled,
+    bool? isGeneratingReport,
     int? duplicatesFound,
     int? currentItem,
     int? totalItems,
@@ -61,18 +65,28 @@ class ScanProgress {
       isScanning: isScanning ?? this.isScanning,
       isCompleted: isCompleted ?? this.isCompleted,
       isCancelled: isCancelled ?? this.isCancelled,
+      isGeneratingReport: isGeneratingReport ?? this.isGeneratingReport,
       duplicatesFound: duplicatesFound ?? this.duplicatesFound,
       currentItem: currentItem ?? this.currentItem,
       totalItems: totalItems ?? this.totalItems,
     );
   }
 
-  String get phaseText => 'Phase $currentPhase of $totalPhases';
+  String get phaseText {
+    if (isGeneratingReport) {
+      return 'Phase 5 of $totalPhases';
+    }
+    return 'Phase $currentPhase of $totalPhases';
+  }
   
   int get progressPercent => (progressPercentage * 100).round();
 
   /// Get appropriate file count display based on current phase
   String get fileCountDisplay {
+    if (isGeneratingReport) {
+      return duplicatesFound > 0 ? '${_formatNumber(duplicatesFound)} duplicates found' : 'Finalizing results...';
+    }
+    
     switch (currentPhase) {
       case 1:
         return processedFiles > 0 ? 'Found ${_formatNumber(processedFiles)} files' : 'Calculating...';

@@ -29,7 +29,8 @@ class HomeScreen extends StatelessWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (scanProvider.hasResults && 
                 scanProvider.currentProgress.isCompleted && 
-                !scanProvider.isScanning) {
+                !scanProvider.isScanning &&
+                !scanProvider.currentProgress.isGeneratingReport) {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(

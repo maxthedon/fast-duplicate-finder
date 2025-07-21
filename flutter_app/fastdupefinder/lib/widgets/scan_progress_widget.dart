@@ -38,7 +38,9 @@ class ScanProgressWidget extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              progress.phaseDescription,
+              progress.isGeneratingReport 
+                ? 'Generating Report'
+                : progress.phaseDescription,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 8),

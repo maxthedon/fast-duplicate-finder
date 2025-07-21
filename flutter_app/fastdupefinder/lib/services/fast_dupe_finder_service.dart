@@ -49,6 +49,7 @@ class FastDupeFinderService {
         isScanning: false,
         isCompleted: false,
         isCancelled: false,
+        isGeneratingReport: false,
         duplicatesFound: 0,
         currentItem: 0,
         totalItems: 0,
@@ -79,10 +80,11 @@ class FastDupeFinderService {
           totalPhases: 5,
           phaseDescription: 'Scan completed',
           processedFiles: result['processed_files'] ?? 0,
-          progressPercentage: 100.0,
+          progressPercentage: 1.0,
           isScanning: false,
           isCompleted: true,
           isCancelled: false,
+          isGeneratingReport: false,
           duplicatesFound: result['duplicates_found'] ?? 0,
           currentItem: 0,
           totalItems: 0,
@@ -98,6 +100,7 @@ class FastDupeFinderService {
           isScanning: false,
           isCompleted: false,
           isCancelled: false,
+          isGeneratingReport: false,
           duplicatesFound: 0,
           currentItem: 0,
           totalItems: 0,
@@ -114,6 +117,7 @@ class FastDupeFinderService {
         isScanning: false,
         isCompleted: false,
         isCancelled: false,
+        isGeneratingReport: false,
         duplicatesFound: 0,
         currentItem: 0,
         totalItems: 0,
@@ -176,6 +180,28 @@ class FastDupeFinderService {
         final status = _bindings.getStatus();
         final progress = _convertStatusToProgress(status);
         _progressController?.add(progress);
+        
+        // If we're generating report and report is available, we can finish
+        if (progress.isGeneratingReport) {
+          // Check if report is available
+          try {
+            final reportString = _bindings.getLastScanReport();
+            if (reportString.isNotEmpty && !reportString.contains('"error"')) {
+              // Report is ready, send final completion status
+              final finalProgress = progress.copyWith(
+                isGeneratingReport: false,
+                isScanning: false,
+                isCompleted: true,
+                phaseDescription: 'Scan completed successfully',
+              );
+              _progressController?.add(finalProgress);
+              timer.cancel();
+              _isScanning = false;
+            }
+          } catch (e) {
+            // Report not ready yet, continue monitoring
+          }
+        }
       } catch (e) {
         // Ignore status errors during monitoring
       }
@@ -208,6 +234,7 @@ class FastDupeFinderService {
     // Map Go phase names to Flutter phase descriptions and numbers
     String phaseDescription;
     int currentPhase;
+    bool isGeneratingReport = false;
     
     switch (phase) {
       case 'phase1':
@@ -231,8 +258,11 @@ class FastDupeFinderService {
         currentPhase = 5;
         break;
       case 'completed':
-        phaseDescription = 'Scan completed';
+        // When phase is completed, transition to report generation state
+        phaseDescription = 'Generating Report';
         currentPhase = 5;
+        isGeneratingReport = true;
+        progress = 100.0; // Keep progress at 100% during report generation
         break;
       default:
         phaseDescription = message.isNotEmpty ? message : phase;
@@ -245,9 +275,10 @@ class FastDupeFinderService {
       phaseDescription: phaseDescription,
       processedFiles: filesFound,
       progressPercentage: progress / 100.0, // Convert percentage to 0-1 range
-      isScanning: phase != 'completed' && phase != 'idle',
+      isScanning: (phase != 'completed' && phase != 'idle') || isGeneratingReport,
       isCompleted: phase == 'completed',
       isCancelled: false,
+      isGeneratingReport: isGeneratingReport,
       duplicatesFound: dupesFound,
       currentItem: currentItem,
       totalItems: totalItems,
