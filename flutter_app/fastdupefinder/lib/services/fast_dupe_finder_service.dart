@@ -49,6 +49,9 @@ class FastDupeFinderService {
         isScanning: false,
         isCompleted: false,
         isCancelled: false,
+        duplicatesFound: 0,
+        currentItem: 0,
+        totalItems: 0,
       );
       _progressController?.add(errorProgress);
     } finally {
@@ -80,6 +83,9 @@ class FastDupeFinderService {
           isScanning: false,
           isCompleted: true,
           isCancelled: false,
+          duplicatesFound: result['duplicates_found'] ?? 0,
+          currentItem: 0,
+          totalItems: 0,
         );
         _progressController?.add(finalProgress);
       } else {
@@ -92,6 +98,9 @@ class FastDupeFinderService {
           isScanning: false,
           isCompleted: false,
           isCancelled: false,
+          duplicatesFound: 0,
+          currentItem: 0,
+          totalItems: 0,
         );
         _progressController?.add(errorProgress);
       }
@@ -105,6 +114,9 @@ class FastDupeFinderService {
         isScanning: false,
         isCompleted: false,
         isCancelled: false,
+        duplicatesFound: 0,
+        currentItem: 0,
+        totalItems: 0,
       );
       _progressController?.add(errorProgress);
     }
@@ -179,32 +191,43 @@ class FastDupeFinderService {
   /// Convert Go status to Flutter ScanProgress
   ScanProgress _convertStatusToProgress(Map<String, dynamic> status) {
     final phase = status['phase'] ?? 'idle';
-    final progress = (status['progress'] ?? 0.0).toDouble();
-    final processedFiles = status['processed_files'] ?? 0;
+    var progress = (status['progress'] ?? 0.0).toDouble();
+    final filesFound = status['files_found'] ?? 0;
+    final dupesFound = status['dupes_found'] ?? 0;
+    final currentItem = status['current_item'] ?? 0;
+    final totalItems = status['total_items'] ?? 0;
+    final message = status['message'] ?? '';
     
-    // Map Go phase names to Flutter phase descriptions
+    // Clamp progress to avoid wild jumps
+    if (progress > 100.0) {
+      progress = 100.0;
+    } else if (progress < 0.0) {
+      progress = 0.0;
+    }
+    
+    // Map Go phase names to Flutter phase descriptions and numbers
     String phaseDescription;
     int currentPhase;
     
     switch (phase) {
-      case 'directory_traversal':
-        phaseDescription = 'Directory traversal';
+      case 'phase1':
+        phaseDescription = 'Scanning files';
         currentPhase = 1;
         break;
-      case 'file_grouping':
-        phaseDescription = 'File size grouping';
+      case 'phase2':
+        phaseDescription = 'Computing partial hashes';
         currentPhase = 2;
         break;
-      case 'hash_calculation':
-        phaseDescription = 'Hash calculation';
+      case 'phase3':
+        phaseDescription = 'Computing full hashes';
         currentPhase = 3;
         break;
-      case 'duplicate_detection':
-        phaseDescription = 'Duplicate detection';
+      case 'phase4':
+        phaseDescription = 'Analyzing folders';
         currentPhase = 4;
         break;
-      case 'report_generation':
-        phaseDescription = 'Report generation';
+      case 'phase5':
+        phaseDescription = 'Filtering results';
         currentPhase = 5;
         break;
       case 'completed':
@@ -212,7 +235,7 @@ class FastDupeFinderService {
         currentPhase = 5;
         break;
       default:
-        phaseDescription = phase;
+        phaseDescription = message.isNotEmpty ? message : phase;
         currentPhase = 1;
     }
 
@@ -220,11 +243,14 @@ class FastDupeFinderService {
       currentPhase: currentPhase,
       totalPhases: 5,
       phaseDescription: phaseDescription,
-      processedFiles: processedFiles,
-      progressPercentage: progress,
+      processedFiles: filesFound,
+      progressPercentage: progress / 100.0, // Convert percentage to 0-1 range
       isScanning: phase != 'completed' && phase != 'idle',
       isCompleted: phase == 'completed',
       isCancelled: false,
+      duplicatesFound: dupesFound,
+      currentItem: currentItem,
+      totalItems: totalItems,
     );
   }
 
@@ -252,6 +278,9 @@ class FastDupeFinderService {
         isScanning: false,
         isCompleted: false,
         isCancelled: true,
+        duplicatesFound: 0,
+        currentItem: 0,
+        totalItems: 0,
       );
       
       _progressController?.add(cancelledProgress);

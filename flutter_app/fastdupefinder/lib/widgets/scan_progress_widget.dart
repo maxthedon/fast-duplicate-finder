@@ -43,7 +43,7 @@ class ScanProgressWidget extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Processed: ${_formatNumber(progress.processedFiles)} files',
+              progress.fileCountDisplay,
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
@@ -71,11 +71,5 @@ class ScanProgressWidget extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _formatNumber(int number) {
-    if (number < 1000) return number.toString();
-    if (number < 1000000) return '${(number / 1000).toStringAsFixed(1)}K';
-    return '${(number / 1000000).toStringAsFixed(1)}M';
   }
 }

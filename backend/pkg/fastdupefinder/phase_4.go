@@ -46,7 +46,7 @@ func Phase4FindDuplicateFolders(FileDuplicates map[string][]string) map[string][
 		// Update progress every 100 folders
 		if i%100 == 0 {
 			progress := 60.0 + (float64(i+1)/float64(totalFolders))*20.0 // 60-80%
-			status.UpdateStatus("phase4", progress, "Analyzing folders", len(pathToHashMap), 0)
+			status.UpdateDetailedStatus("phase4", progress, "Analyzing folders", len(pathToHashMap), 0, i+1, totalFolders, "Folders")
 		}
 
 		signature, isDuplicable := helpers.GetFolderSignature(folderPath, pathToHashMap, folderSignatureCache)

@@ -49,7 +49,7 @@ func Phase2FilterByPartialHash(FilesBySize map[int64][]string, NumWorkers int) m
 				// Simple progress update every 500 files
 				if processedFiles%500 == 0 {
 					progress := 20.0 + (float64(processedFiles)/float64(totalFiles))*20.0 // 20-40%
-					status.UpdateStatus("phase2", progress, "Computing partial hashes", processedFiles, 0)
+					status.UpdateDetailedStatus("phase2", progress, "Computing partial hashes", processedFiles, 0, processedFiles, totalFiles, "Suspects")
 				}
 				mu.Unlock()
 			}

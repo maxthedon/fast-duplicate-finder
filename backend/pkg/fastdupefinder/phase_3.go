@@ -59,7 +59,7 @@ func Phase3FindDuplicatesByFullHash(Candidates map[string][]string, NumWorkers i
 				// Simple progress update every 200 files
 				if processedFiles%200 == 0 {
 					progress := 40.0 + (float64(processedFiles)/float64(totalFiles))*20.0 // 40-60%
-					status.UpdateStatus("phase3", progress, "Computing full hashes", processedFiles, 0)
+					status.UpdateDetailedStatus("phase3", progress, "Computing full hashes", processedFiles, 0, processedFiles, totalFiles, "Suspects")
 				}
 				mu.Unlock()
 			}

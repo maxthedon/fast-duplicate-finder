@@ -11,7 +11,7 @@ import (
 // Phase5FilterResults takes the results from the previous phases and filters out
 // nested duplicate folders and files that are inside those folders.
 func Phase5FilterResults(folderDuplicates map[string][]string, fileDuplicates map[string][]string) (map[string][]string, map[string][]string) {
-	status.UpdateStatus("phase5", 85.0, "Filtering nested duplicates", len(fileDuplicates), len(folderDuplicates))
+	status.UpdateDetailedStatus("phase5", 85.0, "Filtering nested duplicates", len(fileDuplicates), len(folderDuplicates), 0, len(fileDuplicates)+len(folderDuplicates), "Duplicates")
 
 	filteredFolderDuplicates := filterNestedFolders(folderDuplicates)
 	filteredFilesInDuplicateFolders := filterFilesWithinDuplicateFolders(fileDuplicates, filteredFolderDuplicates)

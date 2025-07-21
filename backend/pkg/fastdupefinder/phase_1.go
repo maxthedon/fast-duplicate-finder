@@ -51,8 +51,13 @@ func Phase1GroupBySize(RootDir string, NumWorkers int) map[int64][]string {
 
 				// Simple progress update every 1000 files
 				if processedFiles++; processedFiles%1000 == 0 {
-					progress := 5.0 + float64(processedFiles%10000)/10000.0*15.0 // Rough estimate 5-20%
-					status.UpdateStatus("phase1", progress, "Scanning files", int(processedFiles), 0)
+					// For phase 1, we don't know total files, so progress smoothly from 5% to 20%
+					// Use a logarithmic approach to slow down progress as files increase
+					progress := 5.0 + (15.0 * (1.0 - 1.0/(1.0+float64(processedFiles)/10000.0)))
+					if progress > 20.0 {
+						progress = 20.0
+					}
+					status.UpdateDetailedStatus("phase1", progress, "Scanning files", int(processedFiles), 0, int(processedFiles), 0, "")
 				}
 			}
 		}()
