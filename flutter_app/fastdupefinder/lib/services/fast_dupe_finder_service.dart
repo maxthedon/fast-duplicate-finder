@@ -320,7 +320,7 @@ class FastDupeFinderService {
   }
 
   /// Get final results (from Go library) - no need to run scan again
-  Future<ScanResult> getResults() async {
+  Future<ScanResult> getResults({DateTime? scanStartTime}) async {
     if (_currentScanPath == null) {
       return ScanResult.empty;
     }
@@ -334,7 +334,7 @@ class FastDupeFinderService {
         return ScanResult.empty;
       }
 
-      return _parseReportFromJson(reportString);
+      return _parseReportFromJson(reportString, scanStartTime);
     } catch (e) {
       print('Error getting results: $e');
       return ScanResult.empty;
@@ -342,7 +342,7 @@ class FastDupeFinderService {
   }
 
   /// Parse the report JSON string into a ScanResult
-  ScanResult _parseReportFromJson(String reportString) {
+  ScanResult _parseReportFromJson(String reportString, [DateTime? scanStartTime]) {
     try {
       final report = jsonDecode(reportString) as Map<String, dynamic>;
       
@@ -411,6 +411,7 @@ class FastDupeFinderService {
         duplicateGroups: duplicateGroups,
         totalDuplicates: duplicateGroups.length,
         totalWastedSpace: totalWastedSpace,
+        scanStartedAt: scanStartTime ?? DateTime.now().subtract(const Duration(seconds: 1)), // Default fallback
         scanCompletedAt: DateTime.now(),
         scannedPath: _currentScanPath!,
       );

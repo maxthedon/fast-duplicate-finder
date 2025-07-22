@@ -11,6 +11,7 @@ class ScanProvider extends ChangeNotifier {
   ScanProgress _currentProgress = ScanProgress.initial;
   ScanResult? _scanResult;
   bool _isScanning = false;
+  DateTime? _scanStartTime;
 
   // Getters
   String? get selectedPath => _selectedPath;
@@ -29,6 +30,7 @@ class ScanProvider extends ChangeNotifier {
   Future<void> startScan() async {
     if (!canStartScan) return;
 
+    _scanStartTime = DateTime.now();
     _isScanning = true;
     _currentProgress = ScanProgress.initial.copyWith(isScanning: true);
     _scanResult = null;
@@ -58,7 +60,7 @@ class ScanProvider extends ChangeNotifier {
   Future<void> _getResults() async {
     try {
       // Get the final results from the service
-      _scanResult = await _service.getResults();
+      _scanResult = await _service.getResults(scanStartTime: _scanStartTime);
       notifyListeners();
     } catch (e) {
       print('Error getting scan results: $e');
@@ -97,6 +99,7 @@ class ScanProvider extends ChangeNotifier {
       duplicateGroups: updatedGroups,
       totalDuplicates: _scanResult!.totalDuplicates,
       totalWastedSpace: _scanResult!.totalWastedSpace,
+      scanStartedAt: _scanResult!.scanStartedAt,
       scanCompletedAt: _scanResult!.scanCompletedAt,
       scannedPath: _scanResult!.scannedPath,
     );
@@ -114,6 +117,7 @@ class ScanProvider extends ChangeNotifier {
       duplicateGroups: updatedGroups,
       totalDuplicates: _scanResult!.totalDuplicates,
       totalWastedSpace: _scanResult!.totalWastedSpace,
+      scanStartedAt: _scanResult!.scanStartedAt,
       scanCompletedAt: _scanResult!.scanCompletedAt,
       scannedPath: _scanResult!.scannedPath,
     );
@@ -131,6 +135,7 @@ class ScanProvider extends ChangeNotifier {
       duplicateGroups: updatedGroups,
       totalDuplicates: _scanResult!.totalDuplicates,
       totalWastedSpace: _scanResult!.totalWastedSpace,
+      scanStartedAt: _scanResult!.scanStartedAt,
       scanCompletedAt: _scanResult!.scanCompletedAt,
       scannedPath: _scanResult!.scannedPath,
     );
@@ -165,6 +170,7 @@ class ScanProvider extends ChangeNotifier {
             0,
             (sum, group) => sum + (group.fileSize * (group.duplicateCount - 1)),
           ),
+          scanStartedAt: _scanResult!.scanStartedAt,
           scanCompletedAt: _scanResult!.scanCompletedAt,
           scannedPath: _scanResult!.scannedPath,
         );
@@ -206,6 +212,7 @@ class ScanProvider extends ChangeNotifier {
             0,
             (sum, group) => sum + (group.fileSize * (group.duplicateCount - 1)),
           ),
+          scanStartedAt: _scanResult!.scanStartedAt,
           scanCompletedAt: _scanResult!.scanCompletedAt,
           scannedPath: _scanResult!.scannedPath,
         );

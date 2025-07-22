@@ -60,6 +60,13 @@ class ResultsScreen extends StatelessWidget {
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Scan completed in: ${result.formattedScanDuration}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
             );
@@ -97,6 +104,13 @@ class ResultsScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           'Total wasted space: ${result.formattedWastedSpace}',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Scan completed in: ${result.formattedScanDuration}',
                           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
