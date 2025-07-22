@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/scan_progress.dart';
 import '../models/scan_result.dart';
 import '../models/scan_report.dart';
@@ -440,30 +441,135 @@ class FastDupeFinderService {
     }
   }
 
-  /// Open file in system explorer
+  /// Open file/folder in system explorer with proper highlighting
   Future<void> showInExplorer(String path) async {
     try {
-      String command;
-      List<String> arguments;
-      
-      if (Platform.isLinux) {
-        command = 'xdg-open';
-        arguments = [File(path).parent.path];
-      } else if (Platform.isWindows) {
-        command = 'explorer';
-        arguments = ['/select,', path];
+      if (Platform.isWindows) {
+        // Windows: Use explorer with /select to highlight the item
+        await Process.run('explorer', ['/select,', path]);
       } else if (Platform.isMacOS) {
-        command = 'open';
-        arguments = ['-R', path];
+        // macOS: Use open with -R to reveal in Finder
+        await Process.run('open', ['-R', path]);
+      } else if (Platform.isLinux) {
+        // Linux: Try multiple file managers in order of preference
+        await _showInLinuxExplorer(path);
       } else {
-        print('Platform not supported for showing in explorer');
-        return;
+        // Fallback: Use url_launcher to open parent directory
+        final parentDir = File(path).parent;
+        final uri = parentDir.uri;
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        } else {
+          throw Exception('Cannot open file explorer on this platform');
+        }
       }
-      
-      await Process.run(command, arguments);
     } catch (e) {
       print('Error opening in explorer: $e');
+      // Fallback: Try to open parent directory with url_launcher
+      try {
+        final parentDir = File(path).parent;
+        final uri = parentDir.uri;
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        }
+      } catch (fallbackError) {
+        print('Fallback also failed: $fallbackError');
+      }
     }
+  }
+
+  /// Linux-specific implementation with multiple file manager support
+  Future<void> _showInLinuxExplorer(String path) async {
+    // List of file managers to try, in order of preference
+    final fileManagers = [
+      // GNOME Files (Nautilus) - supports --select for highlighting
+      {'command': 'nautilus', 'args': ['--select', path]},
+      // KDE Dolphin - supports --select for highlighting
+      {'command': 'dolphin', 'args': ['--select', path]},
+      // Nemo (Cinnamon) - supports selection
+      {'command': 'nemo', 'args': [path]},
+      // Caja (MATE) - supports selection when opening file directly
+      {'command': 'caja', 'args': [path]},
+      // XFCE Thunar - opens and selects when given file path
+      {'command': 'thunar', 'args': [path]},
+      // PCManFM (LXDE/LXQt) - basic support
+      {'command': 'pcmanfm', 'args': [File(path).parent.path]},
+    ];
+
+    // Try each file manager
+    for (final fm in fileManagers) {
+      try {
+        final result = await Process.run(
+          fm['command'] as String, 
+          fm['args'] as List<String>,
+        );
+        if (result.exitCode == 0) {
+          return; // Success, we're done
+        }
+      } catch (e) {
+        // This file manager is not available, try the next one
+        continue;
+      }
+    }
+
+    // Try dbus-based approach for better file managers
+    if (await _tryDbusFileSelection(path)) {
+      return;
+    }
+
+    // Try the file:// URL approach with default app
+    if (await _tryFileUrlApproach(path)) {
+      return;
+    }
+
+    // Final fallback: use xdg-open with parent directory (no highlighting)
+    try {
+      await Process.run('xdg-open', [File(path).parent.path]);
+      print('Warning: File opened in folder but not highlighted. Consider installing nautilus, dolphin, or nemo for better file selection.');
+    } catch (e) {
+      // Even xdg-open failed, use url_launcher
+      final parentDir = File(path).parent;
+      final uri = parentDir.uri;
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+        print('Warning: File opened in folder but not highlighted.');
+      } else {
+        throw Exception('No suitable file manager found');
+      }
+    }
+  }
+
+  /// Try D-Bus based file manager communication (advanced approach)
+  Future<bool> _tryDbusFileSelection(String path) async {
+    try {
+      // Try to use D-Bus to communicate with file managers that support it
+      final result = await Process.run('dbus-send', [
+        '--session',
+        '--dest=org.freedesktop.FileManager1',
+        '--type=method_call',
+        '/org/freedesktop/FileManager1',
+        'org.freedesktop.FileManager1.ShowItems',
+        'array:string:"file://$path"',
+        'string:""'
+      ]);
+      return result.exitCode == 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Try opening with file:// URL approach
+  Future<bool> _tryFileUrlApproach(String path) async {
+    try {
+      final fileUri = Uri.file(path);
+      if (await canLaunchUrl(fileUri)) {
+        await launchUrl(fileUri);
+        return true;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    return false;
   }
 
   void dispose() {
