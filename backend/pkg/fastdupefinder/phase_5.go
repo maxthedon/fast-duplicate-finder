@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/status"
 	"golang.org/x/sync/errgroup"
@@ -46,7 +47,7 @@ func Phase5FilterResults(folderDuplicates map[string][]string, fileDuplicates ma
 	}
 
 	// Phase 1: Filter nested duplicate folders. This is a prerequisite for filtering files.
-	filteredFolderDuplicates := filterNestedFolders(folderDuplicates)
+	filteredFolderDuplicates := filterNestedFolders(folderDuplicates, len(fileDuplicates))
 
 	if IsCancelled() {
 		return make(map[string][]string), make(map[string][]string)
@@ -60,7 +61,7 @@ func Phase5FilterResults(folderDuplicates map[string][]string, fileDuplicates ma
 
 // filterNestedFolders identifies and removes duplicate folder sets that are subdirectories
 // of other duplicate folder sets. It uses a combination of sorting and concurrent processing.
-func filterNestedFolders(folderDuplicates map[string][]string) map[string][]string {
+func filterNestedFolders(folderDuplicates map[string][]string, fileGroupCount int) map[string][]string {
 	if len(folderDuplicates) < 2 {
 		return folderDuplicates
 	}
@@ -77,7 +78,7 @@ func filterNestedFolders(folderDuplicates map[string][]string) map[string][]stri
 
 	// Step 3: Identify top-level (non-nested) paths in a single pass.
 	// This loop is sequential as each step depends on the previous one.
-	topLevelPaths := identifyTopLevelPaths(allPaths)
+	topLevelPaths := identifyTopLevelPaths(allPaths, fileGroupCount, len(folderDuplicates))
 
 	// Step 4: Reconstruct the results map containing only the top-level duplicate sets.
 	// This step is performed concurrently for efficiency.
@@ -121,10 +122,11 @@ func collectAndMapPaths(folderDuplicates map[string][]string) ([]string, *sync.M
 
 // identifyTopLevelPaths iterates through a sorted list of paths and identifies
 // those that are not subdirectories of previously identified top-level paths.
-func identifyTopLevelPaths(allPaths []string) map[string]struct{} {
+func identifyTopLevelPaths(allPaths []string, fileGroupCount int, folderGroupCount int) map[string]struct{} {
 	topLevelPaths := make(map[string]struct{})
 	var lastTopLevel string
-	for _, path := range allPaths {
+	totalPaths := len(allPaths)
+	for i, path := range allPaths {
 		if IsCancelled() {
 			break
 		}
@@ -136,6 +138,12 @@ func identifyTopLevelPaths(allPaths []string) map[string]struct{} {
 		// This path is not nested, so it's a new top-level candidate.
 		topLevelPaths[path] = struct{}{}
 		lastTopLevel = path
+
+		// Update status every 500 paths to avoid excessive updates.
+		if i%500 == 0 {
+			progress := 85.0 + (float64(i)/float64(totalPaths))*5.0 // This sub-phase covers 85% to 90%
+			status.UpdateDetailedStatus("phase5", progress, "Filtering nested folders", fileGroupCount, folderGroupCount, i, totalPaths, "Folder Paths")
+		}
 	}
 	return topLevelPaths
 }
@@ -253,6 +261,10 @@ func filterFilesWithinDuplicateFolders(fileDuplicates map[string][]string, filte
 	}
 	g.SetLimit(numWorkers)
 
+	totalFileGroups := len(fileDuplicates)
+	var processedFileGroups int64
+	folderCount := len(filteredFolderDuplicates)
+
 	for hash, paths := range fileDuplicates {
 		if IsCancelled() {
 			break
@@ -275,6 +287,15 @@ func filterFilesWithinDuplicateFolders(fileDuplicates map[string][]string, filte
 			// If more than one path remains after filtering, it's still a valid duplicate set.
 			if len(keptPaths) > 1 {
 				finalFileDuplicates.Store(h, keptPaths)
+			}
+
+			// Atomically update progress for thread-safe reporting.
+			processed := atomic.AddInt64(&processedFileGroups, 1)
+
+			// Update status every 100 groups to avoid excessive updates.
+			if processed%100 == 0 {
+				progress := 90.0 + (float64(processed)/float64(totalFileGroups))*10.0 // This sub-phase covers 90% to 100%
+				status.UpdateDetailedStatus("phase5", progress, "Filtering nested files", totalFileGroups, folderCount, int(processed), totalFileGroups, "File Groups")
 			}
 			return nil
 		})
