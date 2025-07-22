@@ -7,19 +7,21 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // GetFolderSignature is a recursive helper that calculates a canonical signature for a folder.
+// It is designed to be thread-safe and uses sync.Map for concurrent cache access.
 // It returns the signature and a boolean indicating if the folder is a candidate for duplication.
 // A folder is NOT a candidate if it contains any unique files or unique sub-folders.
 func GetFolderSignature(
 	FolderPath string,
-	PathToHashMap map[string]string,
-	FolderSignatureCache map[string]string,
+	PathToHashMap *sync.Map,
+	FolderSignatureCache *sync.Map,
 ) (string, bool) {
 	// Base Case: If we have already calculated this signature, return it from the cache.
-	if sig, found := FolderSignatureCache[FolderPath]; found {
-		return sig, true
+	if sig, found := FolderSignatureCache.Load(FolderPath); found {
+		return sig.(string), true
 	}
 
 	entries, err := os.ReadDir(FolderPath)
@@ -36,27 +38,33 @@ func GetFolderSignature(
 			// Recursive step for subdirectory
 			childSignature, childIsDuplicable := GetFolderSignature(fullPath, PathToHashMap, FolderSignatureCache)
 			if !childIsDuplicable {
-				return "", false // Parent folder contains a unique child, so it's also unique.
+				// This optimization prevents further processing if a unique child is found.
+				// We cache this "unique" status to avoid re-calculating for other potential parents.
+				FolderSignatureCache.Store(FolderPath, "") // Storing an empty string for non-duplicable folders.
+				return "", false
 			}
-			// Prefix 'D:' for directory
+			// Prefix 'D:' for directory to distinguish from files with the same name.
 			contentItems = append(contentItems, fmt.Sprintf("D:%s:%s", entry.Name(), childSignature))
 		} else {
-			// File step
-			hash, found := PathToHashMap[fullPath]
+			// File step: look up the file's hash.
+			hash, found := PathToHashMap.Load(fullPath)
 			if !found {
-				return "", false // Folder contains a unique file, so it's not a duplicate.
+				// Folder contains a unique file, so it's not a duplicate candidate.
+				FolderSignatureCache.Store(FolderPath, "")
+				return "", false
 			}
-			// Prefix 'F:' for file
-			contentItems = append(contentItems, fmt.Sprintf("F:%s:%s", entry.Name(), hash))
+			// Prefix 'F:' for file.
+			contentItems = append(contentItems, fmt.Sprintf("F:%s:%s", entry.Name(), hash.(string)))
 		}
 	}
 
 	// Sort the content items to create a canonical signature, independent of filesystem order.
+	// This ensures that two folders with the same content have the same signature.
 	sort.Strings(contentItems)
 	finalSignature := strings.Join(contentItems, ";")
 
 	// Save the result to the cache before returning.
-	FolderSignatureCache[FolderPath] = finalSignature
+	FolderSignatureCache.Store(FolderPath, finalSignature)
 
 	return finalSignature, true
 }
