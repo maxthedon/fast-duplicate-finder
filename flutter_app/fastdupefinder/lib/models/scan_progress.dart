@@ -93,12 +93,12 @@ class ScanProgress {
       case 2:
       case 3:
         if (totalItems > 0 && currentItem > 0) {
-          return '$currentItem of $totalItems (Suspects)';
+          return '${_formatNumber(currentItem)} of ${_formatNumber(totalItems)} (Suspects)';
         }
         return processedFiles > 0 ? '${_formatNumber(processedFiles)} suspects' : 'Calculating...';
       case 4:
         if (totalItems > 0 && currentItem > 0) {
-          return '$currentItem of $totalItems (Folders)';
+          return '${_formatNumber(currentItem)} of ${_formatNumber(totalItems)} (Folders)';
         }
         return duplicatesFound > 0 ? '${_formatNumber(duplicatesFound)} duplicates found' : 'Analyzing folders...';
       case 5:
@@ -112,8 +112,10 @@ class ScanProgress {
   }
 
   String _formatNumber(int number) {
-    if (number < 1000) return number.toString();
-    if (number < 1000000) return '${(number / 1000).toStringAsFixed(1)}K';
-    return '${(number / 1000000).toStringAsFixed(1)}M';
+    // Format with commas for readability - show full numbers without abbreviation
+    return number.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), 
+      (Match m) => '${m[1]},'
+    );
   }
 }
