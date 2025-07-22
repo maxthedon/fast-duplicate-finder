@@ -11,7 +11,10 @@ import (
 )
 
 // Phase2FilterByPartialHash takes the size-grouped map and filters it further
-// by hashing the first few kilobytes of each file.
+// by hashing selected portions of each file based on size:
+// - Files < 1MB: hash first 4KB
+// - Files < 10MB: hash first and last 4KB
+// - Files >= 10MB: hash first, middle, and last 4KB
 func Phase2FilterByPartialHash(FilesBySize map[int64][]string, NumWorkers int) map[string][]string {
 	// Count total files to process
 	var totalFiles int
@@ -49,7 +52,7 @@ func Phase2FilterByPartialHash(FilesBySize map[int64][]string, NumWorkers int) m
 				// Simple progress update every 500 files
 				if processedFiles%500 == 0 {
 					progress := 20.0 + (float64(processedFiles)/float64(totalFiles))*20.0 // 20-40%
-					status.UpdateDetailedStatus("phase2", progress, "Computing partial hashes", processedFiles, 0, processedFiles, totalFiles, "Suspects")
+					status.UpdateDetailedStatus("phase2", progress, "Computing size-based partial hashes", processedFiles, 0, processedFiles, totalFiles, "Suspects")
 				}
 				mu.Unlock()
 			}
