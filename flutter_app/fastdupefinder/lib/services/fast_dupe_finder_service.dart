@@ -387,12 +387,13 @@ class FastDupeFinderService {
           
           if (paths.length > 1) {
             final folderName = paths.first.split('/').last;
+            final folderSize = set['sizeBytes'] as int? ?? 0;
             
             duplicateGroups.add(DuplicateGroup(
               id: 'folder_$i',
               fileName: folderName,
               filePaths: paths,
-              fileSize: 0,
+              fileSize: folderSize,
               duplicateCount: paths.length,
               type: FileType.folder,
               isSelected: false,

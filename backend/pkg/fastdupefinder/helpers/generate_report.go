@@ -3,10 +3,34 @@ package helpers
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
 
 	reporttypes "github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/types/report_types"
 )
+
+// calculateFolderSize calculates the total size of all files in a folder recursively.
+func calculateFolderSize(folderPath string) int64 {
+	var totalSize int64
+
+	err := filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// Skip files/folders we can't access
+			return nil
+		}
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Warning: Could not calculate size for folder %s: %v", folderPath, err)
+		return 0
+	}
+
+	return totalSize
+}
 
 // GenerateReport formats all findings into a single JSON object and prints it to standard output.
 // It includes both the final, filtered results and the complete raw data for comprehensive reporting.
@@ -47,7 +71,16 @@ func GenerateReport(
 	convertFolderMapToSets := func(dupes map[string][]string) []reporttypes.FolderSet {
 		sets := make([]reporttypes.FolderSet, 0, len(dupes))
 		for signature, paths := range dupes {
-			sets = append(sets, reporttypes.FolderSet{Signature: signature, Paths: paths})
+			// Calculate folder size by getting the size of the first folder
+			var sizeBytes int64
+			if len(paths) > 0 {
+				sizeBytes = calculateFolderSize(paths[0])
+			}
+			sets = append(sets, reporttypes.FolderSet{
+				Signature: signature,
+				Paths:     paths,
+				SizeBytes: sizeBytes,
+			})
 		}
 		// Sort by signature for deterministic output
 		sort.Slice(sets, func(i, j int) bool { return sets[i].Signature < sets[j].Signature })

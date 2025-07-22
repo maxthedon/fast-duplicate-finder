@@ -42,6 +42,7 @@ type FileSet struct {
 type FolderSet struct {
 	Signature string   `json:"signature"`
 	Paths     []string `json:"paths"`
+	SizeBytes int64    `json:"sizeBytes"`
 }
 
 // RawDataReport contains the unfiltered, complete results for detailed analysis.

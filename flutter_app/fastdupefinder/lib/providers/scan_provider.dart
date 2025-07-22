@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/scan_progress.dart';
 import '../models/scan_result.dart';
+import '../models/scan_report.dart';
 import '../services/fast_dupe_finder_service.dart';
 
 class ScanProvider extends ChangeNotifier {
@@ -176,6 +177,45 @@ class ScanProvider extends ChangeNotifier {
 
   Future<void> showInExplorer(String path) async {
     await _service.showInExplorer(path);
+  }
+
+  Future<bool> deleteIndividualPaths(List<String> pathsToDelete) async {
+    try {
+      final success = await _service.deleteItems(pathsToDelete);
+      if (success && _scanResult != null) {
+        // Update the scan result by removing the deleted paths from all groups
+        final updatedGroups = <DuplicateGroup>[];
+        
+        for (final group in _scanResult!.duplicateGroups) {
+          final remainingPaths = group.filePaths.where((path) => !pathsToDelete.contains(path)).toList();
+          
+          // If this group has less than 2 paths remaining, it's no longer a duplicate
+          if (remainingPaths.length >= 2) {
+            // Update the group with remaining paths
+            updatedGroups.add(group.copyWith(
+              filePaths: remainingPaths,
+              duplicateCount: remainingPaths.length,
+            ));
+          }
+        }
+
+        _scanResult = ScanResult(
+          duplicateGroups: updatedGroups,
+          totalDuplicates: updatedGroups.length,
+          totalWastedSpace: updatedGroups.fold<int>(
+            0,
+            (sum, group) => sum + (group.fileSize * (group.duplicateCount - 1)),
+          ),
+          scanCompletedAt: _scanResult!.scanCompletedAt,
+          scannedPath: _scanResult!.scannedPath,
+        );
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      print('Error deleting individual paths: $e');
+      return false;
+    }
   }
 
   @override

@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
-  "build_time": "2025-07-21 19:46:55 UTC",
-  "git_hash": "5489621",
+  "build_time": "2025-07-22 08:11:17 UTC",
+  "git_hash": "688fc88",
   "platforms": [
-    {"platform": "linux", "arch": "amd64", "size": 2697160}
+    {"platform": "linux", "arch": "amd64", "size": 2697888}
   ]
 }
