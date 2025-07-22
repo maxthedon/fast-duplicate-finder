@@ -11,6 +11,38 @@ class ScanProgressWidget extends StatelessWidget {
     this.onCancel,
   });
 
+  Future<void> _showCancelConfirmation(BuildContext context) async {
+    final bool? shouldCancel = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Abort'),
+          content: const Text(
+            'Are you sure you want to abort the scan? '
+            'This will halt the current operation and you\'ll lose the progress.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Continue'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: const Text('Abort'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldCancel == true && onCancel != null) {
+      onCancel!();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -31,7 +63,7 @@ class ScanProgressWidget extends StatelessWidget {
                 if (onCancel != null)
                   IconButton(
                     icon: const Icon(Icons.close),
-                    onPressed: onCancel,
+                    onPressed: () => _showCancelConfirmation(context),
                     tooltip: 'Cancel scan',
                   ),
               ],
