@@ -52,6 +52,9 @@ func RunDuplicateFinder(rootDir string) string {
 	// Reset status for new run
 	status.ResetStatus()
 
+	// Clear the cached report from previous scan
+	lastReport = ""
+
 	result := DuplicateFinderResult{}
 
 	// Run the duplicate finder
