@@ -86,12 +86,14 @@ func main() {
 
 	// Output results based on mode
 	if jsonMode {
-		// JSON output mode
-		fmt.Print(output.JSONifyReport(helpers.GenerateReport(filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates)))
+		// JSON output mode - generate optimized report
+		report := helpers.GenerateReport(filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates)
+		fmt.Print(output.JSONifyReport(report))
 	} else {
-		// Standard text output mode
-		fmt.Print(output.StringifyFileResults(filteredFileDuplicates))
-		fmt.Print(output.StringifyFolderResults(filteredFolderDuplicates))
+		// Standard text output mode - use the optimized report structure
+		report := helpers.GenerateReport(filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates)
+		fmt.Print(output.StringifyFileResults(report.FileDuplicates))
+		fmt.Print(output.StringifyFolderResults(report.FolderDuplicates))
 	}
 }
 

@@ -32,8 +32,8 @@ func calculateFolderSize(folderPath string) int64 {
 	return totalSize
 }
 
-// GenerateReport formats all findings into a single JSON object and prints it to standard output.
-// It includes both the final, filtered results and the complete raw data for comprehensive reporting.
+// GenerateReport formats all findings into a optimized JSON structure.
+// Focuses on essential data while minimizing memory usage and generation time.
 func GenerateReport(
 	filteredFileDuplicates,
 	filteredFolderDuplicates,
@@ -41,7 +41,7 @@ func GenerateReport(
 	allFolderDuplicates map[string][]string) reporttypes.ReportOutput {
 
 	// Helper function to convert a map of file duplicates to a slice of FileSet.
-	// This avoids code repetition and handles sorting for consistent output.
+	// Truncates hash to 12 characters to save memory (sufficient for display).
 	convertFileMapToSets := func(dupes map[string][]string) ([]reporttypes.FileSet, int64) {
 		var totalWasted int64 = 0
 		sets := make([]reporttypes.FileSet, 0, len(dupes))
@@ -60,7 +60,16 @@ func GenerateReport(
 					sizeBytes = -1 // Indicate error
 				}
 			}
-			sets = append(sets, reporttypes.FileSet{Hash: hash, Paths: paths, SizeBytes: sizeBytes})
+			// Truncate hash to first 12 characters to save memory
+			truncatedHash := hash
+			if len(hash) > 12 {
+				truncatedHash = hash[:12]
+			}
+			sets = append(sets, reporttypes.FileSet{
+				Hash:      truncatedHash,
+				Paths:     paths,
+				SizeBytes: sizeBytes,
+			})
 		}
 		// Sort by hash for deterministic output
 		sort.Slice(sets, func(i, j int) bool { return sets[i].Hash < sets[j].Hash })
@@ -68,6 +77,7 @@ func GenerateReport(
 	}
 
 	// Helper function to convert a map of folder duplicates to a slice of FolderSet.
+	// Truncates signature to 12 characters to save memory.
 	convertFolderMapToSets := func(dupes map[string][]string) []reporttypes.FolderSet {
 		sets := make([]reporttypes.FolderSet, 0, len(dupes))
 		for signature, paths := range dupes {
@@ -76,8 +86,13 @@ func GenerateReport(
 			if len(paths) > 0 {
 				sizeBytes = calculateFolderSize(paths[0])
 			}
+			// Truncate signature to first 12 characters to save memory
+			truncatedSignature := signature
+			if len(signature) > 12 {
+				truncatedSignature = signature[:12]
+			}
 			sets = append(sets, reporttypes.FolderSet{
-				Signature: signature,
+				Signature: truncatedSignature,
 				Paths:     paths,
 				SizeBytes: sizeBytes,
 			})
@@ -87,40 +102,18 @@ func GenerateReport(
 		return sets
 	}
 
-	// --- Populate the Final Report ---
+	// Generate only the essential data - no raw data to save memory
 	finalFileSets, wastedSpace := convertFileMapToSets(filteredFileDuplicates)
 	topLevelFolderSets := convertFolderMapToSets(filteredFolderDuplicates)
 
-	// --- Populate the Raw Data Report ---
-	allFileSets, _ := convertFileMapToSets(allFileDuplicates)
-	allFolderSets := convertFolderMapToSets(allFolderDuplicates)
-
-	// --- Assemble the final JSON object ---
+	// Assemble the optimized JSON object with minimal fields
 	return reporttypes.ReportOutput{
 		Summary: reporttypes.SummaryInfo{
-			TotalAllFileSets:   len(allFileDuplicates),
-			TotalAllFolderSets: len(allFolderDuplicates),
-			TopLevelFolderSets: len(filteredFolderDuplicates),
-			StandaloneFileSets: len(filteredFileDuplicates),
-			WastedSpaceBytes:   wastedSpace,
+			FileSets:         len(filteredFileDuplicates),
+			FolderSets:       len(filteredFolderDuplicates),
+			WastedSpaceBytes: wastedSpace,
 		},
-		FileDuplicates: reporttypes.FileDuplicateReport{
-			Description: "Duplicate files that are NOT inside a top-level duplicate folder.",
-			Sets:        finalFileSets,
-		},
-		FolderDuplicates: reporttypes.FolderDuplicateReport{
-			Description: "Top-level duplicate folders. Files inside these are not listed in 'fileDuplicates'.",
-			Sets:        topLevelFolderSets,
-		},
-		RawData: &reporttypes.RawDataReport{
-			AllFileDuplicates: reporttypes.FileDuplicateReport{
-				Description: "The complete list of all duplicate files found, before any filtering.",
-				Sets:        allFileSets,
-			},
-			AllFolderDuplicates: reporttypes.FolderDuplicateReport{
-				Description: "The complete list of all duplicate folders found, including nested ones.",
-				Sets:        allFolderSets,
-			},
-		},
+		FileDuplicates:   finalFileSets,
+		FolderDuplicates: topLevelFolderSets,
 	}
 }

@@ -351,8 +351,8 @@ class _DuplicateFinderScreenState extends State<DuplicateFinderScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Summary', style: Theme.of(context).textTheme.headline6),
-                  Text('File sets: ${summary['totalAllFileSets']}'),
-                  Text('Folder sets: ${summary['totalAllFolderSets']}'),
+                  Text('File sets: ${summary['fileSets']}'),
+                  Text('Folder sets: ${summary['folderSets']}'),
                   Text('Wasted space: ${_formatBytes(summary['wastedSpaceBytes'])}'),
                 ],
               ),

@@ -4,68 +4,51 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 
 	reporttypes "github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/types/report_types"
 )
 
 // StringifyFileResults returns a formatted string representation of the duplicate file results.
-func StringifyFileResults(duplicates map[string][]string) string {
-
-	temp := ""
-
-	if len(duplicates) == 0 {
-
-		temp = "\n--- No duplicate files found. ---"
-		return temp
+// Now works directly with FileSet slice for better performance.
+func StringifyFileResults(fileSets []reporttypes.FileSet) string {
+	if len(fileSets) == 0 {
+		return "\n--- No duplicate files found. ---"
 	}
 
-	temp = "\n--- Found Duplicate Files ---"
-
-	i := 0
+	temp := "\n--- Found Duplicate Files ---"
 	var totalWastedSpace int64 = 0
-	for hash, paths := range duplicates {
-		i++
-		temp += fmt.Sprintf("\nSet %d (SHA256: %s...):\n", i, hash[:12])
 
-		info, err := os.Stat(paths[0])
-		if err == nil {
+	for i, set := range fileSets {
+		temp += fmt.Sprintf("\nSet %d (SHA256: %s...):\n", i+1, set.Hash)
+
+		if set.SizeBytes > 0 {
 			// Calculate wasted space: (number of duplicates - 1) * size
-			wasted := info.Size() * int64(len(paths)-1)
+			wasted := set.SizeBytes * int64(len(set.Paths)-1)
 			totalWastedSpace += wasted
-			temp += fmt.Sprintf("  Size: %d bytes | Wasted: %d bytes\n", info.Size(), wasted)
+			temp += fmt.Sprintf("  Size: %d bytes | Wasted: %d bytes\n", set.SizeBytes, wasted)
 		}
 
-		for _, path := range paths {
-
+		for _, path := range set.Paths {
 			temp += fmt.Sprintf("  - %s\n", path)
 		}
 	}
 
-	temp += fmt.Sprintf("\nSummary: Found %d sets of duplicate files. Total wasted space: %d bytes.\n", len(duplicates), totalWastedSpace)
-
+	temp += fmt.Sprintf("\nSummary: Found %d sets of duplicate files. Total wasted space: %d bytes.\n", len(fileSets), totalWastedSpace)
 	return temp
 }
 
 // StringifyFolderResults returns a formatted string representation of the duplicate folder results.
-func StringifyFolderResults(duplicates map[string][]string) string {
-
-	temp := ""
-
-	if len(duplicates) == 0 {
-		temp = "\n--- No duplicate folders found. ---"
-		return temp
+// Now works directly with FolderSet slice for better performance.
+func StringifyFolderResults(folderSets []reporttypes.FolderSet) string {
+	if len(folderSets) == 0 {
+		return "\n--- No duplicate folders found. ---"
 	}
 
-	temp = "\n--- Found Duplicate Folders ---"
+	temp := "\n--- Found Duplicate Folders ---"
 
-	i := 0
-	for signature, paths := range duplicates {
-		i++
-
-		temp += fmt.Sprintf("\nSet %d (Folder Signature Hash: %s...):\n", i, signature[:12])
-		for _, path := range paths {
-
+	for i, set := range folderSets {
+		temp += fmt.Sprintf("\nSet %d (Folder Signature Hash: %s...):\n", i+1, set.Signature)
+		for _, path := range set.Paths {
 			temp += fmt.Sprintf("  - %s\n", path)
 		}
 	}

@@ -349,12 +349,11 @@ class FastDupeFinderService {
       // Convert Go duplicate groups to Flutter models
       final duplicateGroups = <DuplicateGroup>[];
       
-      // Process file duplicates
+      // Process file duplicates - now direct array instead of object with sets
       final fileDuplicates = report['fileDuplicates'];
-      if (fileDuplicates != null && fileDuplicates['sets'] != null) {
-        final sets = fileDuplicates['sets'] as List<dynamic>;
-        for (int i = 0; i < sets.length; i++) {
-          final set = sets[i] as Map<String, dynamic>;
+      if (fileDuplicates != null && fileDuplicates is List<dynamic>) {
+        for (int i = 0; i < fileDuplicates.length; i++) {
+          final set = fileDuplicates[i] as Map<String, dynamic>;
           final paths = (set['paths'] as List<dynamic>)
               .map((path) => path as String)
               .toList();
@@ -376,12 +375,11 @@ class FastDupeFinderService {
         }
       }
       
-      // Process folder duplicates
+      // Process folder duplicates - now direct array instead of object with sets
       final folderDuplicates = report['folderDuplicates'];
-      if (folderDuplicates != null && folderDuplicates['sets'] != null) {
-        final sets = folderDuplicates['sets'] as List<dynamic>;
-        for (int i = 0; i < sets.length; i++) {
-          final set = sets[i] as Map<String, dynamic>;
+      if (folderDuplicates != null && folderDuplicates is List<dynamic>) {
+        for (int i = 0; i < folderDuplicates.length; i++) {
+          final set = folderDuplicates[i] as Map<String, dynamic>;
           final paths = (set['paths'] as List<dynamic>)
               .map((path) => path as String)
               .toList();
