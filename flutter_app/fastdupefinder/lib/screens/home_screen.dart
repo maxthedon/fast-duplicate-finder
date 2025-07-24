@@ -42,9 +42,10 @@ class HomeScreen extends StatelessWidget {
 
           return Padding(
             padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 // Header section
                 Text(
                   scanProvider.isScanning 
@@ -137,10 +138,9 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
 
-                const Spacer(),
-                
-                // Footer info
-                if (!scanProvider.isScanning)
+                // Add some spacing and footer info
+                if (!scanProvider.isScanning) ...[
+                  const SizedBox(height: 48),
                   Center(
                     child: Text(
                       'Select a folder to scan for duplicate files',
@@ -149,9 +149,11 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                ],
               ],
             ),
-          );
+          ),
+        );
         },
       ),
     );
