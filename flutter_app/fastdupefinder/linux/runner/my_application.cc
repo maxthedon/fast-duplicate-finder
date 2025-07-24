@@ -87,6 +87,9 @@ static void my_application_startup(GApplication* application) {
 
   // Perform any actions required at application startup.
 
+  // Set environment variable to disable XDG desktop portal
+  g_setenv("GTK_USE_PORTAL", "0", TRUE);
+
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
 

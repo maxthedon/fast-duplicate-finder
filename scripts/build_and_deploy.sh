@@ -199,8 +199,56 @@ build_platform() {
     fi
 }
 
+ensure_portal_disabled() {
+    local my_app_file="$FLUTTER_DIR/linux/runner/my_application.cc"
+    
+    if [ ! -f "$my_app_file" ]; then
+        print_warning "my_application.cc not found, skipping portal configuration"
+        return
+    fi
+    
+    print_step "Ensuring XDG desktop portal is disabled..."
+    
+    # Check if the portal disable line exists in startup function
+    if grep -q "g_setenv(\"GTK_USE_PORTAL\", \"0\", TRUE);" "$my_app_file"; then
+        print_success "Portal disable configuration already present"
+        return
+    fi
+    
+    # Check if startup function exists
+    if ! grep -q "static void my_application_startup(GApplication\* application)" "$my_app_file"; then
+        print_warning "my_application_startup function not found, cannot configure portal"
+        return
+    fi
+    
+    # Add the portal disable line to startup function
+    print_step "Adding portal disable configuration to my_application.cc..."
+    
+    # Create a backup
+    cp "$my_app_file" "$my_app_file.backup.$(date +%s)"
+    
+    # Use sed to add the line after the startup function opening
+    sed -i '/static void my_application_startup(GApplication\* application) {/,/G_APPLICATION_CLASS(my_application_parent_class)->startup(application);/ {
+        /G_APPLICATION_CLASS(my_application_parent_class)->startup(application);/i\
+  // Set environment variable to disable XDG desktop portal\
+  g_setenv("GTK_USE_PORTAL", "0", TRUE);\
+
+    }' "$my_app_file"
+    
+    if grep -q "g_setenv(\"GTK_USE_PORTAL\", \"0\", TRUE);" "$my_app_file"; then
+        print_success "Successfully added portal disable configuration"
+    else
+        print_error "Failed to add portal disable configuration"
+        # Restore backup
+        mv "$my_app_file.backup.$(date +%s)" "$my_app_file" 2>/dev/null || true
+    fi
+}
+
 deploy_to_flutter() {
     print_step "Deploying libraries to Flutter project..."
+    
+    # Ensure portal is disabled before deploying
+    ensure_portal_disabled
     
     local deployed=0
     

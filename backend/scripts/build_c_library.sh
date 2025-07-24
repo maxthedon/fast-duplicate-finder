@@ -28,6 +28,55 @@ FLUTTER_IOS_DIR="$FLUTTER_ROOT/ios"
 FLUTTER_WINDOWS_DIR="$FLUTTER_ROOT/windows"
 FLUTTER_LINUX_DIR="$FLUTTER_ROOT/linux"
 FLUTTER_MACOS_DIR="$FLUTTER_ROOT/macos"
+FLUTTER_APP_DIR="$FLUTTER_ROOT/fastdupefinder"
+
+# Function to ensure XDG portal is disabled in Flutter Linux app
+ensure_portal_disabled() {
+    local my_app_file="$FLUTTER_APP_DIR/linux/runner/my_application.cc"
+    
+    if [ ! -f "$my_app_file" ]; then
+        echo "⚠️  my_application.cc not found, skipping portal configuration"
+        return
+    fi
+    
+    echo "🔧 Ensuring XDG desktop portal is disabled..."
+    
+    # Check if the portal disable line exists in startup function
+    if grep -q "g_setenv(\"GTK_USE_PORTAL\", \"0\", TRUE);" "$my_app_file"; then
+        echo "✅ Portal disable configuration already present"
+        return
+    fi
+    
+    # Check if startup function exists
+    if ! grep -q "static void my_application_startup(GApplication\* application)" "$my_app_file"; then
+        echo "⚠️  my_application_startup function not found, cannot configure portal"
+        return
+    fi
+    
+    # Add the portal disable line to startup function
+    echo "🔧 Adding portal disable configuration to my_application.cc..."
+    
+    # Create a backup
+    cp "$my_app_file" "$my_app_file.backup.$(date +%s)"
+    
+    # Use sed to add the line after the startup function opening
+    sed -i '/static void my_application_startup(GApplication\* application) {/,/G_APPLICATION_CLASS(my_application_parent_class)->startup(application);/ {
+        /G_APPLICATION_CLASS(my_application_parent_class)->startup(application);/i\
+  // Set environment variable to disable XDG desktop portal\
+  g_setenv("GTK_USE_PORTAL", "0", TRUE);\
+
+    }' "$my_app_file"
+    
+    if grep -q "g_setenv(\"GTK_USE_PORTAL\", \"0\", TRUE);" "$my_app_file"; then
+        echo "✅ Successfully added portal disable configuration"
+    else
+        echo "❌ Failed to add portal disable configuration"
+        # Restore backup if available
+        if [ -f "$my_app_file.backup.$(date +%s)" ]; then
+            mv "$my_app_file.backup.$(date +%s)" "$my_app_file" 2>/dev/null || true
+        fi
+    fi
+}
 
 # Create output directories
 mkdir -p "$OUTPUT_DIR"
@@ -35,6 +84,10 @@ mkdir -p "$OUTPUT_DIR"
 echo "🏗️  Building Fast Duplicate Finder C libraries..."
 echo "📁 Backend: $PROJECT_ROOT"
 echo "📱 Flutter: $FLUTTER_ROOT"
+
+# Ensure portal is disabled for Linux builds
+ensure_portal_disabled
+echo
 
 # Flag to control Flutter deployment
 DEPLOY_TO_FLUTTER=${DEPLOY_TO_FLUTTER:-true}
