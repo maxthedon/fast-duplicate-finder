@@ -112,6 +112,14 @@ install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
    COMPONENT Runtime)
 
+# Install custom native library (libfastdupe.so)
+set(CUSTOM_NATIVE_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../lib/native")
+if(EXISTS "${CUSTOM_NATIVE_LIB_DIR}/libfastdupe.so")
+  install(FILES "${CUSTOM_NATIVE_LIB_DIR}/libfastdupe.so"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.
 set(FLUTTER_ASSET_DIR_NAME "flutter_assets")

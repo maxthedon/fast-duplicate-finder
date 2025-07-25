@@ -67,23 +67,31 @@ class DuplicateFinderBindings {
   void _loadLibrary() {
     String libraryPath;
     if (Platform.isLinux) {
-      // Try relative path first (for development), then absolute path
+      // Try different paths in order of preference
       try {
-        libraryPath = 'lib/native/libfastdupe.so';
+        // First try the bundle's lib directory (for production builds)
+        libraryPath = 'lib/libfastdupe.so';
         _dylib = ffi.DynamicLibrary.open(libraryPath);
       } catch (e) {
         try {
-          libraryPath = './lib/native/libfastdupe.so';
+          // Try the development lib/native directory
+          libraryPath = 'lib/native/libfastdupe.so';
           _dylib = ffi.DynamicLibrary.open(libraryPath);
         } catch (e2) {
           try {
-            // Try the build directory
-            libraryPath = '../../backend/build/libfastdupe.so';
+            // Try relative path for development
+            libraryPath = './lib/native/libfastdupe.so';
             _dylib = ffi.DynamicLibrary.open(libraryPath);
           } catch (e3) {
-            // Fallback to libfastdupe.so in the same directory
-            libraryPath = 'libfastdupe.so';
-            _dylib = ffi.DynamicLibrary.open(libraryPath);
+            try {
+              // Try the build directory
+              libraryPath = '../../backend/build/libfastdupe.so';
+              _dylib = ffi.DynamicLibrary.open(libraryPath);
+            } catch (e4) {
+              // Fallback to libfastdupe.so in the same directory
+              libraryPath = 'libfastdupe.so';
+              _dylib = ffi.DynamicLibrary.open(libraryPath);
+            }
           }
         }
       }
