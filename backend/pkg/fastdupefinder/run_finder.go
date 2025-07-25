@@ -9,7 +9,23 @@ import (
 
 // RunFinder orchestrates the entire duplicate finding process.
 func RunFinder(RootDir string) (map[string][]string, map[string][]string, map[string][]string, map[string][]string, error) {
-	numWorkers := runtime.NumCPU()
+	return RunFinderWithConfig(RootDir, 0) // 0 means auto-detect
+}
+
+// RunFinderWithConfig orchestrates the entire duplicate finding process with custom CPU configuration.
+// If cpuCores is 0 or negative, it will auto-detect and use all available CPU cores.
+func RunFinderWithConfig(RootDir string, cpuCores int) (map[string][]string, map[string][]string, map[string][]string, map[string][]string, error) {
+	// Determine number of workers
+	var numWorkers int
+	if cpuCores <= 0 {
+		numWorkers = runtime.NumCPU() // Auto-detect
+	} else {
+		numWorkers = cpuCores
+		// Ensure we don't exceed available CPUs
+		if numWorkers > runtime.NumCPU() {
+			numWorkers = runtime.NumCPU()
+		}
+	}
 
 	// Reset cancellation flag at start
 	SetCancelled(false)

@@ -81,6 +81,7 @@ extern "C" {
 
 extern void InitializeLibraryC();
 extern char* RunDuplicateFinderC(char* rootDir);
+extern char* RunDuplicateFinderWithConfigC(char* rootDir, int cpuCores);
 extern char* GetCurrentStatusC();
 extern char* GetVersionC();
 extern char* GetLogsC(int count);

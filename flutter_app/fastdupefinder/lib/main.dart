@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/scan_provider.dart';
+import 'providers/settings_provider.dart';
 import 'screens/splash_screen.dart';
 import 'utils/app_theme.dart';
 
@@ -13,8 +14,11 @@ class FastDupeFinderApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => ScanProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => ScanProvider()),
+        ChangeNotifierProvider(create: (context) => SettingsProvider()..initialize()),
+      ],
       child: MaterialApp(
         title: 'Fast Duplicate Finder',
         theme: AppTheme.lightTheme,

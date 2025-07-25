@@ -113,7 +113,7 @@ install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    COMPONENT Runtime)
 
 # Install custom native library (libfastdupe.so)
-set(CUSTOM_NATIVE_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../lib/native")
+set(CUSTOM_NATIVE_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 if(EXISTS "${CUSTOM_NATIVE_LIB_DIR}/libfastdupe.so")
   install(FILES "${CUSTOM_NATIVE_LIB_DIR}/libfastdupe.so"
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"

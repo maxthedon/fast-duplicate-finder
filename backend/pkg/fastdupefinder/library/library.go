@@ -47,7 +47,13 @@ func SetStatusCallback(callback StatusCallback) {
 // RunDuplicateFinder is the main library function that will be exposed to Flutter
 // It runs the duplicate finder and returns the result as JSON
 func RunDuplicateFinder(rootDir string) string {
-	logger.Info("Library RunDuplicateFinder called with directory: "+rootDir, "Library")
+	return RunDuplicateFinderWithConfig(rootDir, 0) // 0 means auto-detect
+}
+
+// RunDuplicateFinderWithConfig runs the duplicate finder with custom CPU configuration
+// If cpuCores is 0 or negative, it will auto-detect and use all available CPU cores
+func RunDuplicateFinderWithConfig(rootDir string, cpuCores int) string {
+	logger.Info(fmt.Sprintf("Library RunDuplicateFinderWithConfig called with directory: %s, cpuCores: %d", rootDir, cpuCores), "Library")
 
 	// Reset status for new run
 	status.ResetStatus()
@@ -58,7 +64,7 @@ func RunDuplicateFinder(rootDir string) string {
 	result := DuplicateFinderResult{}
 
 	// Run the duplicate finder
-	filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates, err := fastdupefinder.RunFinder(rootDir)
+	filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates, err := fastdupefinder.RunFinderWithConfig(rootDir, cpuCores)
 	if err != nil {
 		result.Success = false
 		result.Error = err.Error()

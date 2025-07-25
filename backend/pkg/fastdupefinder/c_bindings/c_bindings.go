@@ -24,8 +24,13 @@ func InitializeLibraryC() {
 
 //export RunDuplicateFinderC
 func RunDuplicateFinderC(rootDir *C.char) *C.char {
+	return RunDuplicateFinderWithConfigC(rootDir, 0) // 0 means auto-detect
+}
+
+//export RunDuplicateFinderWithConfigC
+func RunDuplicateFinderWithConfigC(rootDir *C.char, cpuCores C.int) *C.char {
 	goRootDir := C.GoString(rootDir)
-	result := library.RunDuplicateFinder(goRootDir)
+	result := library.RunDuplicateFinderWithConfig(goRootDir, int(cpuCores))
 	return C.CString(result)
 }
 

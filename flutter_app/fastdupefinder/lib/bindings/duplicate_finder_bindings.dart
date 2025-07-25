@@ -10,6 +10,9 @@ typedef InitializeLibraryCDart = void Function();
 typedef RunDuplicateFinderCNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
 typedef RunDuplicateFinderCDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
 
+typedef RunDuplicateFinderWithConfigCNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Int32);
+typedef RunDuplicateFinderWithConfigCDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, int);
+
 typedef GetCurrentStatusCNative = ffi.Pointer<ffi.Char> Function();
 typedef GetCurrentStatusCDart = ffi.Pointer<ffi.Char> Function();
 
@@ -44,6 +47,7 @@ class DuplicateFinderBindings {
   // Function bindings
   late InitializeLibraryCDart initializeLibrary;
   late RunDuplicateFinderCDart runDuplicateFinder;
+  late RunDuplicateFinderWithConfigCDart runDuplicateFinderWithConfig;
   late GetCurrentStatusCDart getCurrentStatus;
   late GetVersionCDart getVersion;
   late GetLogsCDart getLogs;
@@ -109,6 +113,7 @@ class DuplicateFinderBindings {
   void _bindFunctions() {
     initializeLibrary = _dylib.lookupFunction<InitializeLibraryCNative, InitializeLibraryCDart>('InitializeLibraryC');
     runDuplicateFinder = _dylib.lookupFunction<RunDuplicateFinderCNative, RunDuplicateFinderCDart>('RunDuplicateFinderC');
+    runDuplicateFinderWithConfig = _dylib.lookupFunction<RunDuplicateFinderWithConfigCNative, RunDuplicateFinderWithConfigCDart>('RunDuplicateFinderWithConfigC');
     getCurrentStatus = _dylib.lookupFunction<GetCurrentStatusCNative, GetCurrentStatusCDart>('GetCurrentStatusC');
     getVersion = _dylib.lookupFunction<GetVersionCNative, GetVersionCDart>('GetVersionC');
     getLogs = _dylib.lookupFunction<GetLogsCNative, GetLogsCDart>('GetLogsC');
@@ -133,9 +138,13 @@ class DuplicateFinderBindings {
   }
 
   Map<String, dynamic> scanDirectory(String directoryPath) {
+    return scanDirectoryWithConfig(directoryPath, 0); // 0 means auto-detect
+  }
+
+  Map<String, dynamic> scanDirectoryWithConfig(String directoryPath, int cpuCores) {
     final pathPtr = directoryPath.toNativeUtf8().cast<ffi.Char>();
     try {
-      final resultPtr = runDuplicateFinder(pathPtr);
+      final resultPtr = runDuplicateFinderWithConfig(pathPtr, cpuCores);
       final jsonResult = _convertCString(resultPtr);
       if (jsonResult.isEmpty) {
         return {'success': false, 'error': 'Empty result from scan'};

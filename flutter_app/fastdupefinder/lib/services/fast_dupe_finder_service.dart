@@ -25,7 +25,7 @@ class FastDupeFinderService {
   }
 
   /// Start scan with progress callback
-  Future<void> startScan(String rootPath, Function(ScanProgress) onProgress) async {
+  Future<void> startScan(String rootPath, Function(ScanProgress) onProgress, {int? cpuCores}) async {
     if (_isScanning) return;
 
     _isScanning = true;
@@ -39,7 +39,7 @@ class FastDupeFinderService {
 
     try {
       // Run the actual scan using FFI in a separate isolate to avoid blocking UI
-      await _runScanInBackground(rootPath);
+      await _runScanInBackground(rootPath, cpuCores: cpuCores);
     } catch (e) {
       // Handle unexpected errors
       final errorProgress = ScanProgress(
@@ -64,10 +64,10 @@ class FastDupeFinderService {
   }
 
   /// Run scan in background isolate to avoid blocking UI
-  Future<void> _runScanInBackground(String rootPath) async {
+  Future<void> _runScanInBackground(String rootPath, {int? cpuCores}) async {
     try {
       // Run the FFI call in a separate isolate to avoid blocking the UI
-      final result = await _runScanInIsolate(rootPath);
+      final result = await _runScanInIsolate(rootPath, cpuCores: cpuCores);
       
       // Wait for completion by monitoring status
       while (_isScanning && _bindings.isScanRunning()) {
@@ -129,13 +129,14 @@ class FastDupeFinderService {
   }
 
   /// Run the actual FFI scan in a separate isolate
-  Future<Map<String, dynamic>> _runScanInIsolate(String rootPath) async {
+  Future<Map<String, dynamic>> _runScanInIsolate(String rootPath, {int? cpuCores}) async {
     final receivePort = ReceivePort();
     
     try {
       await Isolate.spawn(_scanIsolateEntryPoint, {
         'sendPort': receivePort.sendPort,
         'rootPath': rootPath,
+        'cpuCores': cpuCores,
       });
       
       final result = await receivePort.first as Map<String, dynamic>;
@@ -151,14 +152,17 @@ class FastDupeFinderService {
   static void _scanIsolateEntryPoint(Map<String, dynamic> params) {
     final sendPort = params['sendPort'] as SendPort;
     final rootPath = params['rootPath'] as String;
+    final cpuCores = params['cpuCores'] as int?;
     
     try {
       // Initialize bindings in the isolate
       final bindings = DuplicateFinderBindings.instance;
       bindings.initialize();
       
-      // Run the actual scan
-      final result = bindings.scanDirectory(rootPath);
+      // Run the actual scan with CPU configuration
+      final result = cpuCores != null && cpuCores > 0
+          ? bindings.scanDirectoryWithConfig(rootPath, cpuCores)
+          : bindings.scanDirectory(rootPath);
       
       // Send result back to main isolate
       sendPort.send(result);

@@ -4,6 +4,7 @@ import '../models/scan_result.dart';
 import '../models/scan_report.dart';
 import '../services/fast_dupe_finder_service.dart';
 import '../utils/logger.dart';
+import 'settings_provider.dart';
 
 class ScanProvider extends ChangeNotifier {
   final FastDupeFinderService _service = FastDupeFinderService();
@@ -28,7 +29,7 @@ class ScanProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> startScan() async {
+  Future<void> startScan({SettingsProvider? settingsProvider}) async {
     if (!canStartScan) return;
 
     _scanStartTime = DateTime.now();
@@ -38,6 +39,12 @@ class ScanProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Get CPU cores setting from settings provider
+      int? cpuCores;
+      if (settingsProvider != null) {
+        cpuCores = settingsProvider.settings.getEffectiveCpuCores();
+      }
+
       await _service.startScan(_selectedPath!, (progress) {
         _currentProgress = progress;
         _isScanning = progress.isScanning || progress.isGeneratingReport;
@@ -47,7 +54,7 @@ class ScanProvider extends ChangeNotifier {
         if (progress.isCompleted && !progress.isGeneratingReport && !progress.isCancelled) {
           _getResults();
         }
-      });
+      }, cpuCores: cpuCores);
     } catch (e) {
       _isScanning = false;
       _currentProgress = ScanProgress.initial.copyWith(

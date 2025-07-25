@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/scan_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/scan_progress_widget.dart';
 import 'results_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -17,32 +19,48 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Fast Duplicate Finder'),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      body: Consumer<ScanProvider>(
-        builder: (context, scanProvider, child) {
-          // Navigate to results screen when scan is completed
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (scanProvider.hasResults && 
-                scanProvider.currentProgress.isCompleted && 
-                !scanProvider.isScanning &&
-                !scanProvider.currentProgress.isGeneratingReport) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ResultsScreen(),
-                ),
-              );
-            }
-          });
+    return Consumer<ScanProvider>(
+      builder: (context, scanProvider, child) {
+        // Navigate to results screen when scan is completed
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scanProvider.hasResults && 
+              scanProvider.currentProgress.isCompleted && 
+              !scanProvider.isScanning &&
+              !scanProvider.currentProgress.isGeneratingReport) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ResultsScreen(),
+              ),
+            );
+          }
+        });
 
-          return Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: SingleChildScrollView(
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Fast Duplicate Finder'),
+            centerTitle: true,
+            elevation: 0,
+            actions: [
+              // Settings button - only visible when not scanning
+              if (!scanProvider.isScanning)
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  tooltip: 'Advanced Settings',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+          body: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -116,7 +134,10 @@ class HomeScreen extends StatelessWidget {
                   Center(
                     child: ElevatedButton(
                       onPressed: scanProvider.canStartScan
-                          ? () => scanProvider.startScan()
+                          ? () {
+                              final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+                              scanProvider.startScan(settingsProvider: settingsProvider);
+                            }
                           : null,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
@@ -151,11 +172,11 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
               ],
-            ),
-          ),
-        );
-        },
-      ),
+            ), // End of Column
+          ), // End of SingleChildScrollView
+        ), // End of Padding (body)
+        ); // End of Scaffold
+      },
     );
   }
 }
