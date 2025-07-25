@@ -7,6 +7,7 @@ import '../models/scan_progress.dart';
 import '../models/scan_result.dart';
 import '../models/scan_report.dart';
 import '../bindings/duplicate_finder_bindings.dart';
+import '../utils/logger.dart';
 
 class FastDupeFinderService {
   static final FastDupeFinderService _instance = FastDupeFinderService._internal();
@@ -295,7 +296,7 @@ class FastDupeFinderService {
     try {
       _bindings.cancelCurrentScan();
     } catch (e) {
-      print('Error cancelling scan: $e');
+      Logger.log('Error cancelling scan: $e');
     }
     
     if (_progressController != null) {
@@ -330,13 +331,13 @@ class FastDupeFinderService {
       final reportString = _bindings.getLastScanReport();
       
       if (reportString.isEmpty || reportString.contains('"error"')) {
-        print('No cached results available: $reportString');
+        Logger.log('No cached results available: $reportString');
         return ScanResult.empty;
       }
 
       return _parseReportFromJson(reportString, scanStartTime);
     } catch (e) {
-      print('Error getting results: $e');
+      Logger.log('Error getting results: $e');
       return ScanResult.empty;
     }
   }
@@ -414,7 +415,7 @@ class FastDupeFinderService {
         scannedPath: _currentScanPath!,
       );
     } catch (e) {
-      print('Error parsing report JSON: $e');
+      Logger.log('Error parsing report JSON: $e');
       return ScanResult.empty;
     }
   }
@@ -435,7 +436,7 @@ class FastDupeFinderService {
       
       return true;
     } catch (e) {
-      print('Error deleting items: $e');
+      Logger.log('Error deleting items: $e');
       return false;
     }
   }
@@ -463,7 +464,7 @@ class FastDupeFinderService {
         }
       }
     } catch (e) {
-      print('Error opening in explorer: $e');
+      Logger.log('Error opening in explorer: $e');
       // Fallback: Try to open parent directory with url_launcher
       try {
         final parentDir = File(path).parent;
@@ -472,7 +473,7 @@ class FastDupeFinderService {
           await launchUrl(uri);
         }
       } catch (fallbackError) {
-        print('Fallback also failed: $fallbackError');
+        Logger.log('Fallback also failed: $fallbackError');
       }
     }
   }
@@ -524,14 +525,14 @@ class FastDupeFinderService {
     // Final fallback: use xdg-open with parent directory (no highlighting)
     try {
       await Process.run('xdg-open', [File(path).parent.path]);
-      print('Warning: File opened in folder but not highlighted. Consider installing nautilus, dolphin, or nemo for better file selection.');
+      Logger.log('Warning: File opened in folder but not highlighted. Consider installing nautilus, dolphin, or nemo for better file selection.');
     } catch (e) {
       // Even xdg-open failed, use url_launcher
       final parentDir = File(path).parent;
       final uri = parentDir.uri;
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
-        print('Warning: File opened in folder but not highlighted.');
+        Logger.log('Warning: File opened in folder but not highlighted.');
       } else {
         throw Exception('No suitable file manager found');
       }

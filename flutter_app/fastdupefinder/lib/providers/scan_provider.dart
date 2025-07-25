@@ -3,6 +3,7 @@ import '../models/scan_progress.dart';
 import '../models/scan_result.dart';
 import '../models/scan_report.dart';
 import '../services/fast_dupe_finder_service.dart';
+import '../utils/logger.dart';
 
 class ScanProvider extends ChangeNotifier {
   final FastDupeFinderService _service = FastDupeFinderService();
@@ -63,7 +64,7 @@ class ScanProvider extends ChangeNotifier {
       _scanResult = await _service.getResults(scanStartTime: _scanStartTime);
       notifyListeners();
     } catch (e) {
-      print('Error getting scan results: $e');
+      Logger.log('Error getting scan results: $e');
       // Results might not be available yet, but that's handled by the service
     }
   }
@@ -177,7 +178,7 @@ class ScanProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error deleting items: $e');
+      Logger.log('Error deleting items: $e');
     }
   }
 
@@ -220,7 +221,7 @@ class ScanProvider extends ChangeNotifier {
       }
       return success;
     } catch (e) {
-      print('Error deleting individual paths: $e');
+      Logger.log('Error deleting individual paths: $e');
       return false;
     }
   }

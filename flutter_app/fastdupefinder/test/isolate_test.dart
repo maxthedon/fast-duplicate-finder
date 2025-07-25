@@ -1,3 +1,4 @@
+import 'package:fastdupefinder/utils/logger.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fastdupefinder/services/fast_dupe_finder_service.dart';
 
@@ -24,7 +25,7 @@ void main() {
         });
       } catch (e) {
         // Expected to fail in test environment - that's ok
-        print('Expected error in test environment: $e');
+        Logger.log('Expected error in test environment: $e');
       }
       
       final elapsed = DateTime.now().difference(startTime);
