@@ -41,8 +41,10 @@ class ScanProvider extends ChangeNotifier {
     try {
       // Get CPU cores setting from settings provider
       int? cpuCores;
+      bool? filterByFilename;
       if (settingsProvider != null) {
         cpuCores = settingsProvider.settings.getEffectiveCpuCores();
+        filterByFilename = settingsProvider.settings.filterByFilename;
       }
 
       await _service.startScan(_selectedPath!, (progress) {
@@ -54,7 +56,7 @@ class ScanProvider extends ChangeNotifier {
         if (progress.isCompleted && !progress.isGeneratingReport && !progress.isCancelled) {
           _getResults();
         }
-      }, cpuCores: cpuCores);
+      }, cpuCores: cpuCores, filterByFilename: filterByFilename);
     } catch (e) {
       _isScanning = false;
       _currentProgress = ScanProgress.initial.copyWith(

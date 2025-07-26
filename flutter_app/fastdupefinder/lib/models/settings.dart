@@ -1,19 +1,23 @@
 class Settings {
   final int? cpuCores;
   final bool useAutoCpuDetection;
+  final bool filterByFilename;
 
   const Settings({
     this.cpuCores,
     this.useAutoCpuDetection = true,
+    this.filterByFilename = false,
   });
 
   Settings copyWith({
     int? cpuCores,
     bool? useAutoCpuDetection,
+    bool? filterByFilename,
   }) {
     return Settings(
       cpuCores: cpuCores ?? this.cpuCores,
       useAutoCpuDetection: useAutoCpuDetection ?? this.useAutoCpuDetection,
+      filterByFilename: filterByFilename ?? this.filterByFilename,
     );
   }
 
@@ -21,6 +25,7 @@ class Settings {
     return {
       'cpuCores': cpuCores,
       'useAutoCpuDetection': useAutoCpuDetection,
+      'filterByFilename': filterByFilename,
     };
   }
 
@@ -28,6 +33,7 @@ class Settings {
     return Settings(
       cpuCores: json['cpuCores'] as int?,
       useAutoCpuDetection: json['useAutoCpuDetection'] as bool? ?? true,
+      filterByFilename: json['filterByFilename'] as bool? ?? false,
     );
   }
 

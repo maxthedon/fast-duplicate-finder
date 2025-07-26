@@ -9,18 +9,24 @@ import (
 
 // RunFinder orchestrates the entire duplicate finding process.
 func RunFinder(RootDir string) (map[string][]string, map[string][]string, map[string][]string, map[string][]string, error) {
-	return RunFinderWithConfig(RootDir, 0) // 0 means auto-detect
+	return RunFinderWithConfig(RootDir, DefaultConfig())
 }
 
-// RunFinderWithConfig orchestrates the entire duplicate finding process with custom CPU configuration.
+// RunFinderWithCpuConfig is a compatibility function that maintains the old CPU-only configuration interface.
 // If cpuCores is 0 or negative, it will auto-detect and use all available CPU cores.
-func RunFinderWithConfig(RootDir string, cpuCores int) (map[string][]string, map[string][]string, map[string][]string, map[string][]string, error) {
+func RunFinderWithCpuConfig(RootDir string, cpuCores int) (map[string][]string, map[string][]string, map[string][]string, map[string][]string, error) {
+	config := DefaultConfig().WithCpuCores(cpuCores)
+	return RunFinderWithConfig(RootDir, config)
+}
+
+// RunFinderWithConfig orchestrates the entire duplicate finding process with custom configuration.
+func RunFinderWithConfig(RootDir string, config Phase1Config) (map[string][]string, map[string][]string, map[string][]string, map[string][]string, error) {
 	// Determine number of workers
 	var numWorkers int
-	if cpuCores <= 0 {
+	if config.CpuCores <= 0 {
 		numWorkers = runtime.NumCPU() // Auto-detect
 	} else {
-		numWorkers = cpuCores
+		numWorkers = config.CpuCores
 		// Ensure we don't exceed available CPUs
 		if numWorkers > runtime.NumCPU() {
 			numWorkers = runtime.NumCPU()
@@ -30,12 +36,16 @@ func RunFinderWithConfig(RootDir string, cpuCores int) (map[string][]string, map
 	// Reset cancellation flag at start
 	SetCancelled(false)
 
-	// Phase 1: Group by size (0-20%)
-	status.UpdateStatus("phase1", 0.0, "Scanning files", 0, 0)
+	// Phase 1: Group by size (and optionally filename) (0-20%)
+	statusMsg := "Scanning files"
+	if config.FilterByFilename {
+		statusMsg = "Scanning files (with filename filter)"
+	}
+	status.UpdateStatus("phase1", 0.0, statusMsg, 0, 0)
 	if IsCancelled() {
 		return nil, nil, nil, nil, fmt.Errorf("scan cancelled by user")
 	}
-	potentialDupesBySize := Phase1GroupBySize(RootDir, numWorkers)
+	potentialDupesBySize := Phase1GroupBySizeWithConfig(RootDir, config)
 
 	// Phase 2: Filter by partial hash (20-40%)
 	status.UpdateStatus("phase2", 20.0, "Computing partial hashes", 0, 0)

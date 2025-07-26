@@ -65,6 +65,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 
                 const SizedBox(height: AppTheme.paddingLarge),
 
+                // Advanced Options Card
+                _buildAdvancedOptionsCard(context, settingsProvider),
+                
+                const SizedBox(height: AppTheme.paddingLarge),
+
                 // System Information Card
                 _buildSystemInfoCard(context),
                 
@@ -235,6 +240,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'Current setting: ${settings.getCpuDisplayText()} core${settings.useAutoCpuDetection || (settings.cpuCores ?? 1) > 1 ? 's' : ''}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdvancedOptionsCard(BuildContext context, SettingsProvider settingsProvider) {
+    final settings = settingsProvider.settings;
+    
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppTheme.paddingLarge),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.tune,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+                const SizedBox(width: AppTheme.paddingMedium),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Advanced Options',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Configure advanced scanning behavior',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppTheme.paddingLarge),
+
+            // Filename Filtering Toggle
+            SwitchListTile(
+              title: const Text('Smart Filename Filtering'),
+              subtitle: Text(
+                'Controls how files are initially grouped for duplicate detection:\n\n'
+                '✅ ENABLED: Only files with identical names AND sizes are considered potential duplicates\n'
+                '• Pros: Faster scanning, fewer false positives\n'
+                '• Cons: May miss duplicates with different filenames\n\n'
+                '🔍 DISABLED (Default): All files with same size are considered potential duplicates\n'
+                '• Pros: Finds all duplicates regardless of filename\n'
+                '• Cons: Slower scanning, more files to analyze',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  height: 1.4,
+                ),
+              ),
+              value: settings.filterByFilename,
+              onChanged: (bool value) {
+                settingsProvider.updateFilenameFilter(value);
+              },
+              secondary: Icon(
+                settings.filterByFilename ? Icons.filter_alt : Icons.filter_alt_off,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+
+            const SizedBox(height: AppTheme.paddingMedium),
+            
+            // Status display
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppTheme.paddingMedium),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: AppTheme.paddingSmall),
+                  Expanded(
+                    child: Text(
+                      settings.filterByFilename
+                          ? '🎯 Smart filtering is ON: Only files with matching names and sizes will be grouped together for analysis.'
+                          : '🔍 Complete scanning is ON: All files with the same size will be analyzed, regardless of filename (recommended for thorough duplicate detection).',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        height: 1.3,
+                      ),
                     ),
                   ),
                 ],

@@ -13,6 +13,9 @@ typedef RunDuplicateFinderCDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi
 typedef RunDuplicateFinderWithConfigCNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Int32);
 typedef RunDuplicateFinderWithConfigCDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, int);
 
+typedef RunDuplicateFinderWithAdvancedConfigCNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Int32, ffi.Int32);
+typedef RunDuplicateFinderWithAdvancedConfigCDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, int, int);
+
 typedef GetCurrentStatusCNative = ffi.Pointer<ffi.Char> Function();
 typedef GetCurrentStatusCDart = ffi.Pointer<ffi.Char> Function();
 
@@ -48,6 +51,7 @@ class DuplicateFinderBindings {
   late InitializeLibraryCDart initializeLibrary;
   late RunDuplicateFinderCDart runDuplicateFinder;
   late RunDuplicateFinderWithConfigCDart runDuplicateFinderWithConfig;
+  late RunDuplicateFinderWithAdvancedConfigCDart runDuplicateFinderWithAdvancedConfig;
   late GetCurrentStatusCDart getCurrentStatus;
   late GetVersionCDart getVersion;
   late GetLogsCDart getLogs;
@@ -114,6 +118,7 @@ class DuplicateFinderBindings {
     initializeLibrary = _dylib.lookupFunction<InitializeLibraryCNative, InitializeLibraryCDart>('InitializeLibraryC');
     runDuplicateFinder = _dylib.lookupFunction<RunDuplicateFinderCNative, RunDuplicateFinderCDart>('RunDuplicateFinderC');
     runDuplicateFinderWithConfig = _dylib.lookupFunction<RunDuplicateFinderWithConfigCNative, RunDuplicateFinderWithConfigCDart>('RunDuplicateFinderWithConfigC');
+    runDuplicateFinderWithAdvancedConfig = _dylib.lookupFunction<RunDuplicateFinderWithAdvancedConfigCNative, RunDuplicateFinderWithAdvancedConfigCDart>('RunDuplicateFinderWithAdvancedConfigC');
     getCurrentStatus = _dylib.lookupFunction<GetCurrentStatusCNative, GetCurrentStatusCDart>('GetCurrentStatusC');
     getVersion = _dylib.lookupFunction<GetVersionCNative, GetVersionCDart>('GetVersionC');
     getLogs = _dylib.lookupFunction<GetLogsCNative, GetLogsCDart>('GetLogsC');
@@ -145,6 +150,22 @@ class DuplicateFinderBindings {
     final pathPtr = directoryPath.toNativeUtf8().cast<ffi.Char>();
     try {
       final resultPtr = runDuplicateFinderWithConfig(pathPtr, cpuCores);
+      final jsonResult = _convertCString(resultPtr);
+      if (jsonResult.isEmpty) {
+        return {'success': false, 'error': 'Empty result from scan'};
+      }
+      return jsonDecode(jsonResult);
+    } catch (e) {
+      return {'success': false, 'error': 'Scan failed: $e'};
+    } finally {
+      malloc.free(pathPtr);
+    }
+  }
+
+  Map<String, dynamic> scanDirectoryWithAdvancedConfig(String directoryPath, int cpuCores, bool filterByFilename) {
+    final pathPtr = directoryPath.toNativeUtf8().cast<ffi.Char>();
+    try {
+      final resultPtr = runDuplicateFinderWithAdvancedConfig(pathPtr, cpuCores, filterByFilename ? 1 : 0);
       final jsonResult = _convertCString(resultPtr);
       if (jsonResult.isEmpty) {
         return {'success': false, 'error': 'Empty result from scan'};

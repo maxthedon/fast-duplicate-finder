@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"unsafe"
 
+	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder"
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/library"
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/logger"
 	"github.com/maxthedon/fast-dupe-finder/pkg/fastdupefinder/status"
@@ -31,6 +32,20 @@ func RunDuplicateFinderC(rootDir *C.char) *C.char {
 func RunDuplicateFinderWithConfigC(rootDir *C.char, cpuCores C.int) *C.char {
 	goRootDir := C.GoString(rootDir)
 	result := library.RunDuplicateFinderWithConfig(goRootDir, int(cpuCores))
+	return C.CString(result)
+}
+
+//export RunDuplicateFinderWithAdvancedConfigC
+func RunDuplicateFinderWithAdvancedConfigC(rootDir *C.char, cpuCores C.int, filterByFilename C.int) *C.char {
+	goRootDir := C.GoString(rootDir)
+
+	// Create configuration
+	config := fastdupefinder.DefaultConfig().WithCpuCores(int(cpuCores))
+	if filterByFilename != 0 {
+		config = config.WithFilenameFilter(true)
+	}
+
+	result := library.RunDuplicateFinderWithFullConfig(goRootDir, config)
 	return C.CString(result)
 }
 

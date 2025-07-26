@@ -43,6 +43,13 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Update filename filtering setting
+  Future<void> updateFilenameFilter(bool enabled) async {
+    _settings = _settings.copyWith(filterByFilename: enabled);
+    await _saveSettings();
+    notifyListeners();
+  }
+
   /// Reset all settings to defaults
   Future<void> resetToDefaults() async {
     _settings = const Settings();

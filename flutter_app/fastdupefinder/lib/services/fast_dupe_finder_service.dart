@@ -25,7 +25,7 @@ class FastDupeFinderService {
   }
 
   /// Start scan with progress callback
-  Future<void> startScan(String rootPath, Function(ScanProgress) onProgress, {int? cpuCores}) async {
+  Future<void> startScan(String rootPath, Function(ScanProgress) onProgress, {int? cpuCores, bool? filterByFilename}) async {
     if (_isScanning) return;
 
     _isScanning = true;
@@ -39,7 +39,7 @@ class FastDupeFinderService {
 
     try {
       // Run the actual scan using FFI in a separate isolate to avoid blocking UI
-      await _runScanInBackground(rootPath, cpuCores: cpuCores);
+      await _runScanInBackground(rootPath, cpuCores: cpuCores, filterByFilename: filterByFilename);
     } catch (e) {
       // Handle unexpected errors
       final errorProgress = ScanProgress(
@@ -64,10 +64,10 @@ class FastDupeFinderService {
   }
 
   /// Run scan in background isolate to avoid blocking UI
-  Future<void> _runScanInBackground(String rootPath, {int? cpuCores}) async {
+  Future<void> _runScanInBackground(String rootPath, {int? cpuCores, bool? filterByFilename}) async {
     try {
       // Run the FFI call in a separate isolate to avoid blocking the UI
-      final result = await _runScanInIsolate(rootPath, cpuCores: cpuCores);
+      final result = await _runScanInIsolate(rootPath, cpuCores: cpuCores, filterByFilename: filterByFilename);
       
       // Wait for completion by monitoring status
       while (_isScanning && _bindings.isScanRunning()) {
@@ -129,7 +129,7 @@ class FastDupeFinderService {
   }
 
   /// Run the actual FFI scan in a separate isolate
-  Future<Map<String, dynamic>> _runScanInIsolate(String rootPath, {int? cpuCores}) async {
+  Future<Map<String, dynamic>> _runScanInIsolate(String rootPath, {int? cpuCores, bool? filterByFilename}) async {
     final receivePort = ReceivePort();
     
     try {
@@ -137,6 +137,7 @@ class FastDupeFinderService {
         'sendPort': receivePort.sendPort,
         'rootPath': rootPath,
         'cpuCores': cpuCores,
+        'filterByFilename': filterByFilename,
       });
       
       final result = await receivePort.first as Map<String, dynamic>;
@@ -153,16 +154,30 @@ class FastDupeFinderService {
     final sendPort = params['sendPort'] as SendPort;
     final rootPath = params['rootPath'] as String;
     final cpuCores = params['cpuCores'] as int?;
+    final filterByFilename = params['filterByFilename'] as bool?;
     
     try {
       // Initialize bindings in the isolate
       final bindings = DuplicateFinderBindings.instance;
       bindings.initialize();
       
-      // Run the actual scan with CPU configuration
-      final result = cpuCores != null && cpuCores > 0
-          ? bindings.scanDirectoryWithConfig(rootPath, cpuCores)
-          : bindings.scanDirectory(rootPath);
+      // Run the actual scan with configuration
+      Map<String, dynamic> result;
+      
+      if (filterByFilename == true) {
+        // Use advanced configuration with filename filtering
+        result = bindings.scanDirectoryWithAdvancedConfig(
+          rootPath, 
+          cpuCores ?? 0, 
+          true
+        );
+      } else if (cpuCores != null && cpuCores > 0) {
+        // Use regular CPU configuration
+        result = bindings.scanDirectoryWithConfig(rootPath, cpuCores);
+      } else {
+        // Use basic scan
+        result = bindings.scanDirectory(rootPath);
+      }
       
       // Send result back to main isolate
       sendPort.send(result);

@@ -53,7 +53,13 @@ func RunDuplicateFinder(rootDir string) string {
 // RunDuplicateFinderWithConfig runs the duplicate finder with custom CPU configuration
 // If cpuCores is 0 or negative, it will auto-detect and use all available CPU cores
 func RunDuplicateFinderWithConfig(rootDir string, cpuCores int) string {
-	logger.Info(fmt.Sprintf("Library RunDuplicateFinderWithConfig called with directory: %s, cpuCores: %d", rootDir, cpuCores), "Library")
+	config := fastdupefinder.DefaultConfig().WithCpuCores(cpuCores)
+	return RunDuplicateFinderWithFullConfig(rootDir, config)
+}
+
+// RunDuplicateFinderWithFullConfig runs the duplicate finder with full configuration options
+func RunDuplicateFinderWithFullConfig(rootDir string, config fastdupefinder.Phase1Config) string {
+	logger.Info(fmt.Sprintf("Library RunDuplicateFinderWithFullConfig called with directory: %s, config: %+v", rootDir, config), "Library")
 
 	// Reset status for new run
 	status.ResetStatus()
@@ -64,7 +70,7 @@ func RunDuplicateFinderWithConfig(rootDir string, cpuCores int) string {
 	result := DuplicateFinderResult{}
 
 	// Run the duplicate finder
-	filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates, err := fastdupefinder.RunFinderWithConfig(rootDir, cpuCores)
+	filteredFileDuplicates, filteredFolderDuplicates, allFileDuplicates, allFolderDuplicates, err := fastdupefinder.RunFinderWithConfig(rootDir, config)
 	if err != nil {
 		result.Success = false
 		result.Error = err.Error()
