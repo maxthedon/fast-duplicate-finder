@@ -95,7 +95,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64 gcc-mingw-w64-aarch64
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev gcc-aarch64-linux-gnu gcc-mingw-w64
         shell: bash
       
       - name: Build Command-Line Interface
