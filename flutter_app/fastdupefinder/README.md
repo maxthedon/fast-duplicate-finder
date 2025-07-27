@@ -105,4 +105,4 @@ The app is designed to integrate with a Go backend library:
 
 ## License
 
-MIT License - See LICENSE file for details
+This project is licensed under the GNU General Public License v3.0. See the `LICENSE` file in the root of the repository for more details.

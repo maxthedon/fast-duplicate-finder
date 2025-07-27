@@ -1,0 +1,65 @@
+# Build artifacts
+backend/build/
+*.so
+*.dll
+*.dylib
+*.h
+
+# Go build artifacts
+*.exe
+*.exe~
+*.test
+*.out
+go.work
+
+# Flutter/Dart build artifacts
+flutter_app/fastdupefinder/build/
+flutter_app/fastdupefinder/.dart_tool/
+flutter_app/fastdupefinder/.flutter-plugins
+flutter_app/fastdupefinder/.flutter-plugins-dependencies
+flutter_app/fastdupefinder/.packages
+flutter_app/fastdupefinder/pubspec.lock
+
+# Platform-specific Flutter build outputs
+flutter_app/fastdupefinder/linux/flutter/ephemeral/
+flutter_app/fastdupefinder/macos/Flutter/ephemeral/
+flutter_app/fastdupefinder/windows/flutter/ephemeral/
+
+# Native libraries (generated)
+flutter_app/fastdupefinder/lib/native/libfastdupe.*
+flutter_app/fastdupefinder/lib/native/build_info.json
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Test coverage
+coverage/
+
+# Version control
+.svn/
+
+# FVM (Flutter Version Management) - keep config but ignore downloads
+flutter_app/fastdupefinder/.fvm/versions/
+flutter_app/fastdupefinder/.fvm/flutter_sdk
+flutter_app/fastdupefinder/.fvm/release
+flutter_app/fastdupefinder/.fvm/version
+
+# Temporary files
+*.tmp
+*.temp
