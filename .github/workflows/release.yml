@@ -18,24 +18,57 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             go-platform: linux
-            cli-name: fast-dupe-finder
-            flutter-archive-name: fast-dupe-finder-flutter-linux-amd64.zip
-            cli-archive-name: fast-dupe-finder-cli-linux-amd64.zip
+            go-arch: amd64
+            cli-name: Fast-Duplicate-Finder
+            flutter-archive-name: Fast-Duplicate-Finder-linux-amd64.zip
+            cli-archive-name: Fast-Duplicate-Finder-command-line-linux-amd64.zip
             flutter-build-path: build/linux/x64/release/bundle
+            flutter-target: linux-x64
+          - os: ubuntu-latest
+            platform: linux
+            go-platform: linux
+            go-arch: arm64
+            cli-name: Fast-Duplicate-Finder
+            flutter-archive-name: Fast-Duplicate-Finder-linux-arm64.zip
+            cli-archive-name: Fast-Duplicate-Finder-command-line-linux-arm64.zip
+            flutter-build-path: build/linux/arm64/release/bundle
+            flutter-target: linux-arm64
           - os: macos-latest
             platform: macos
             go-platform: darwin
-            cli-name: fast-dupe-finder
-            flutter-archive-name: fast-dupe-finder-flutter-macos-amd64.zip
-            cli-archive-name: fast-dupe-finder-cli-macos-amd64.zip
+            go-arch: amd64
+            cli-name: Fast-Duplicate-Finder
+            flutter-archive-name: Fast-Duplicate-Finder-macos-amd64.zip
+            cli-archive-name: Fast-Duplicate-Finder-command-line-macos-amd64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
+            flutter-target: macos-x64
+          - os: macos-latest
+            platform: macos
+            go-platform: darwin
+            go-arch: arm64
+            cli-name: Fast-Duplicate-Finder
+            flutter-archive-name: Fast-Duplicate-Finder-macos-arm64.zip
+            cli-archive-name: Fast-Duplicate-Finder-command-line-macos-arm64.zip
+            flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
+            flutter-target: macos-arm64
           - os: windows-latest
             platform: windows
             go-platform: windows
-            cli-name: fast-dupe-finder.exe
-            flutter-archive-name: fast-dupe-finder-flutter-windows-amd64.zip
-            cli-archive-name: fast-dupe-finder-cli-windows-amd64.zip
+            go-arch: amd64
+            cli-name: Fast-Duplicate-Finder.exe
+            flutter-archive-name: Fast-Duplicate-Finder-windows-amd64.zip
+            cli-archive-name: Fast-Duplicate-Finder-command-line-windows-amd64.zip
             flutter-build-path: build/windows/x64/runner/Release
+            flutter-target: windows-x64
+          - os: windows-latest
+            platform: windows
+            go-platform: windows
+            go-arch: arm64
+            cli-name: Fast-Duplicate-Finder.exe
+            flutter-archive-name: Fast-Duplicate-Finder-windows-arm64.zip
+            cli-archive-name: Fast-Duplicate-Finder-command-line-windows-arm64.zip
+            flutter-build-path: build/windows/arm64/runner/Release
+            flutter-target: windows-arm64
 
     steps:
       - name: Checkout repository
@@ -55,26 +88,26 @@ jobs:
       - name: Build Go CLI
         run: |
           cd backend
-          GOOS=${{ matrix.go-platform }} GOARCH=amd64 go build -o ../${{ matrix.cli-name }} main.go
+          GOOS=${{ matrix.go-platform }} GOARCH=${{ matrix.go-arch }} go build -o ../${{ matrix.cli-name }} main.go
         shell: bash
 
       - name: Build native Go shared library
         run: |
           chmod +x ./scripts/build_and_deploy.sh
-          ./scripts/build_and_deploy.sh --platform ${{ matrix.go-platform }}
+          ./scripts/build_and_deploy.sh --platform ${{ matrix.go-platform }} --arch ${{ matrix.go-arch }}
         shell: bash
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev gcc-aarch64-linux-gnu
         shell: bash
 
       - name: Build Flutter app
         run: |
           cd flutter_app/fastdupefinder
-          flutter build ${{ matrix.platform }} --release
+          flutter build ${{ matrix.platform }} --release --target-platform ${{ matrix.flutter-target }}
         shell: bash
 
       - name: Package Flutter App (macOS)

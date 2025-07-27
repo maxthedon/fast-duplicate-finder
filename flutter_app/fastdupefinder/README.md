@@ -1,4 +1,4 @@
-# fastdupefinder
+# Fast Duplicate Finder
 
 A new Flutter project.
 

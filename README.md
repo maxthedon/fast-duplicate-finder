@@ -1,6 +1,6 @@
-# Fast Dupe Finder
+# Fast Duplicate Finder
 
-Fast Dupe Finder is a cross-platform desktop application for finding and managing duplicate files. It's built with a Go backend for high-performance file scanning and a Flutter frontend for a modern and responsive user interface.
+Fast Duplicate Finder is a cross-platform desktop application for finding and managing duplicate files. It's built with a Go backend for high-performance file scanning and a Flutter frontend for a modern and responsive user interface.
 
 ## Features
 

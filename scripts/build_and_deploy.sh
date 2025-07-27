@@ -28,8 +28,11 @@ LIBRARY_NAME="libfastdupe"
 # Platform configurations: platform:arch:extension:cc_env
 PLATFORMS=(
     "linux:amd64:so:"
+    "linux:arm64:so:aarch64-linux-gnu-gcc"
     "windows:amd64:dll:x86_64-w64-mingw32-gcc"
+    "windows:arm64:dll:aarch64-w64-mingw32-gcc"
     "darwin:amd64:dylib:"
+    "darwin:arm64:dylib:"
 )
 
 # Version management
@@ -343,6 +346,7 @@ show_usage() {
     echo "  --version-bump    Bump version (patch, minor, major)"
     echo "  --no-deploy       Build only, don't deploy to Flutter"
     echo "  --platform        Build specific platform (linux,windows,darwin)"
+    echo "  --arch            Build specific architecture (amd64, arm64)"
     echo "  --help            Show this help message"
     echo
     echo "Examples:"
@@ -350,6 +354,7 @@ show_usage() {
     echo "  $0 --clean                  # Clean and build all platforms"
     echo "  $0 --version-bump minor     # Bump minor version and build"
     echo "  $0 --platform linux         # Build only Linux version"
+    echo "  $0 --arch amd64            # Build only for amd64 architecture"
     echo "  $0 --no-deploy              # Build without deploying to Flutter"
 }
 
@@ -359,6 +364,7 @@ main() {
     local deploy_flag=true
     local version_bump=""
     local target_platform=""
+    local target_arch=""
     
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -377,6 +383,10 @@ main() {
                 ;;
             --platform)
                 target_platform="$2"
+                shift 2
+                ;;
+            --arch)
+                target_arch="$2"
                 shift 2
                 ;;
             --help)
@@ -437,6 +447,11 @@ main() {
         
         # Skip if specific platform requested and this isn't it
         if [ -n "$target_platform" ] && [ "$platform" != "$target_platform" ]; then
+            continue
+        fi
+
+        # Skip if specific architecture requested and this isn't it
+        if [ -n "$target_arch" ] && [ "$arch" != "$target_arch" ]; then
             continue
         fi
         
