@@ -105,3 +105,5 @@ jobs:
           body: "Automated release for ${{ github.ref_name }}"
           prerelease: false
           draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
