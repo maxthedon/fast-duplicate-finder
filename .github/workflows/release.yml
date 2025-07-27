@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-and-release:
-    name: Build & Release for ${{ matrix.os }}
+    name: Build & Release for ${{ matrix.platform }}-${{ matrix.go-arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -24,6 +24,7 @@ jobs:
             cli-archive-name: Fast-Duplicate-Finder-command-line-linux-amd64.zip
             flutter-build-path: build/linux/x64/release/bundle
             flutter-target: linux-x64
+            cc: gcc
           - os: ubuntu-latest
             platform: linux
             go-platform: linux
@@ -33,6 +34,27 @@ jobs:
             cli-archive-name: Fast-Duplicate-Finder-command-line-linux-arm64.zip
             flutter-build-path: build/linux/arm64/release/bundle
             flutter-target: linux-arm64
+            cc: aarch64-linux-gnu-gcc
+          - os: ubuntu-latest
+            platform: windows
+            go-platform: windows
+            go-arch: amd64
+            cli-name: Fast-Duplicate-Finder.exe
+            flutter-archive-name: Fast-Duplicate-Finder-windows-amd64.zip
+            cli-archive-name: Fast-Duplicate-Finder-command-line-windows-amd64.zip
+            flutter-build-path: build/windows/x64/runner/Release
+            flutter-target: windows-x64
+            cc: x86_64-w64-mingw32-gcc
+          - os: ubuntu-latest
+            platform: windows
+            go-platform: windows
+            go-arch: arm64
+            cli-name: Fast-Duplicate-Finder.exe
+            flutter-archive-name: Fast-Duplicate-Finder-windows-arm64.zip
+            cli-archive-name: Fast-Duplicate-Finder-command-line-windows-arm64.zip
+            flutter-build-path: build/windows/arm64/runner/Release
+            flutter-target: windows-arm64
+            cc: aarch64-w64-mingw32-gcc
           - os: macos-latest
             platform: macos
             go-platform: darwin
@@ -42,6 +64,7 @@ jobs:
             cli-archive-name: Fast-Duplicate-Finder-command-line-macos-amd64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             flutter-target: macos-x64
+            cc: clang
           - os: macos-latest
             platform: macos
             go-platform: darwin
@@ -51,85 +74,72 @@ jobs:
             cli-archive-name: Fast-Duplicate-Finder-command-line-macos-arm64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             flutter-target: macos-arm64
-          - os: windows-latest
-            platform: windows
-            go-platform: windows
-            go-arch: amd64
-            cli-name: Fast-Duplicate-Finder.exe
-            flutter-archive-name: Fast-Duplicate-Finder-windows-amd64.zip
-            cli-archive-name: Fast-Duplicate-Finder-command-line-windows-amd64.zip
-            flutter-build-path: build/windows/x64/runner/Release
-            flutter-target: windows-x64
-          - os: windows-latest
-            platform: windows
-            go-platform: windows
-            go-arch: arm64
-            cli-name: Fast-Duplicate-Finder.exe
-            flutter-archive-name: Fast-Duplicate-Finder-windows-arm64.zip
-            cli-archive-name: Fast-Duplicate-Finder-command-line-windows-arm64.zip
-            flutter-build-path: build/windows/arm64/runner/Release
-            flutter-target: windows-arm64
+            cc: clang
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: Set up Go Environment
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
           cache-dependency-path: backend/go.sum
 
-      - name: Set up Flutter
+      - name: Set up Flutter Environment
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
       
-      - name: Build Go CLI
+      - name: Build Command-Line Interface
+        env:
+          CC: ${{ matrix.cc }}
         run: |
           cd backend
           GOOS=${{ matrix.go-platform }} GOARCH=${{ matrix.go-arch }} go build -o ../${{ matrix.cli-name }} main.go
         shell: bash
 
-      - name: Build native Go shared library
+      - name: Build Shared Library for Flutter
+        env:
+          CC: ${{ matrix.cc }}
         run: |
           chmod +x ./scripts/build_and_deploy.sh
           ./scripts/build_and_deploy.sh --platform ${{ matrix.go-platform }} --arch ${{ matrix.go-arch }}
         shell: bash
 
-      - name: Install Linux dependencies
+      - name: Install Build Dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev gcc-aarch64-linux-gnu
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64 gcc-mingw-w64-aarch64
         shell: bash
 
-      - name: Build Flutter app
+      - name: Build Flutter Desktop Application
         run: |
           cd flutter_app/fastdupefinder
           flutter build ${{ matrix.platform }} --release --target-platform ${{ matrix.flutter-target }}
         shell: bash
 
-      - name: Package Flutter App (macOS)
+      - name: Package macOS Application
         if: matrix.os == 'macos-latest'
         run: |
           cd flutter_app/fastdupefinder
           ditto -c -k --sequesterRsrc --keepParent "${{ matrix.flutter-build-path }}" "${{ matrix.flutter-archive-name }}"
         shell: bash
 
-      - name: Package Flutter App (Linux/Windows)
+      - name: Package Linux/Windows Application
         if: matrix.os != 'macos-latest'
         run: |
           cd flutter_app/fastdupefinder
           7z a -tzip "${{ matrix.flutter-archive-name }}" "${{ matrix.flutter-build-path }}"
         shell: bash
         
-      - name: Package CLI Tool
+      - name: Package Command-Line Interface
         run: |
           7z a -tzip "${{ matrix.cli-archive-name }}" "${{ matrix.cli-name }}"
         shell: bash
 
-      - name: Upload Release Assets
+      - name: Upload Assets to Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
