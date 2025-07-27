@@ -79,23 +79,23 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern void InitializeLibraryC();
-extern char* RunDuplicateFinderC(char* rootDir);
-extern char* RunDuplicateFinderWithConfigC(char* rootDir, int cpuCores);
-extern char* RunDuplicateFinderWithAdvancedConfigC(char* rootDir, int cpuCores, int filterByFilename);
-extern char* GetCurrentStatusC();
-extern char* GetVersionC();
-extern char* GetLogsC(int count);
-extern void ClearLogsC();
-extern void FreeStringC(char* ptr);
-extern void SetStatusCallbackC(void* callback);
-extern void RemoveStatusCallbackC();
-extern char* RunDuplicateFinderMobileC(char* rootDir, int maxWorkers, int reducedLogging, int lowMemoryMode);
-extern char* GetMobileConfigC();
-extern char* GetLastErrorC();
-extern int IsRunningC();
-extern void CancelScanC();
-extern char* GetLastReportC();
+extern __declspec(dllexport) void InitializeLibraryC();
+extern __declspec(dllexport) char* RunDuplicateFinderC(char* rootDir);
+extern __declspec(dllexport) char* RunDuplicateFinderWithConfigC(char* rootDir, int cpuCores);
+extern __declspec(dllexport) char* RunDuplicateFinderWithAdvancedConfigC(char* rootDir, int cpuCores, int filterByFilename);
+extern __declspec(dllexport) char* GetCurrentStatusC();
+extern __declspec(dllexport) char* GetVersionC();
+extern __declspec(dllexport) char* GetLogsC(int count);
+extern __declspec(dllexport) void ClearLogsC();
+extern __declspec(dllexport) void FreeStringC(char* ptr);
+extern __declspec(dllexport) void SetStatusCallbackC(void* callback);
+extern __declspec(dllexport) void RemoveStatusCallbackC();
+extern __declspec(dllexport) char* RunDuplicateFinderMobileC(char* rootDir, int maxWorkers, int reducedLogging, int lowMemoryMode);
+extern __declspec(dllexport) char* GetMobileConfigC();
+extern __declspec(dllexport) char* GetLastErrorC();
+extern __declspec(dllexport) int IsRunningC();
+extern __declspec(dllexport) void CancelScanC();
+extern __declspec(dllexport) char* GetLastReportC();
 
 #ifdef __cplusplus
 }

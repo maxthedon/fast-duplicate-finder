@@ -1,0 +1,99 @@
+# This workflow builds and creates a GitHub Release for Windows, macOS, and Linux
+# when a new tag is pushed that starts with 'v' (e.g., v1.0.0, v1.2.3).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    name: Build & Release for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            go-platform: linux
+            cli-name: fast-dupe-finder
+            flutter-archive-name: fast-dupe-finder-flutter-linux-amd64.zip
+            cli-archive-name: fast-dupe-finder-cli-linux-amd64.zip
+            flutter-build-path: build/linux/x64/release/bundle
+          - os: macos-latest
+            platform: macos
+            go-platform: darwin
+            cli-name: fast-dupe-finder
+            flutter-archive-name: fast-dupe-finder-flutter-macos-amd64.zip
+            cli-archive-name: fast-dupe-finder-cli-macos-amd64.zip
+            flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
+          - os: windows-latest
+            platform: windows
+            go-platform: windows
+            cli-name: fast-dupe-finder.exe
+            flutter-archive-name: fast-dupe-finder-flutter-windows-amd64.zip
+            cli-archive-name: fast-dupe-finder-cli-windows-amd64.zip
+            flutter-build-path: build/windows/x64/runner/Release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      
+      - name: Build Go CLI
+        run: |
+          cd backend
+          GOOS=${{ matrix.go-platform }} GOARCH=amd64 go build -o ../${{ matrix.cli-name }} main.go
+        shell: bash
+
+      - name: Build native Go shared library
+        run: |
+          chmod +x ./scripts/build_and_deploy.sh
+          ./scripts/build_and_deploy.sh --platform ${{ matrix.go-platform }}
+        shell: bash
+
+      - name: Build Flutter app
+        run: |
+          cd flutter_app/fastdupefinder
+          flutter build ${{ matrix.platform }} --release
+        shell: bash
+
+      - name: Package Flutter App (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd flutter_app/fastdupefinder
+          ditto -c -k --sequesterRsrc --keepParent "${{ matrix.flutter-build-path }}" "${{ matrix.flutter-archive-name }}"
+        shell: bash
+
+      - name: Package Flutter App (Linux/Windows)
+        if: matrix.os != 'macos-latest'
+        run: |
+          cd flutter_app/fastdupefinder
+          7z a -tzip "${{ matrix.flutter-archive-name }}" "${{ matrix.flutter-build-path }}"
+        shell: bash
+        
+      - name: Package CLI Tool
+        run: |
+          7z a -tzip "${{ matrix.cli-archive-name }}" "${{ matrix.cli-name }}"
+        shell: bash
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.cli-archive-name }}
+            flutter_app/fastdupefinder/${{ matrix.flutter-archive-name }}
+          body: "Automated release for ${{ github.ref_name }}"
+          prerelease: false
+          draft: false
