@@ -45,7 +45,7 @@ jobs:
             flutter-build-path: build/windows/x64/runner/Release
             flutter-target: windows-x64
             cc: x86_64-w64-mingw32-gcc
-          - os: windows-latest
+          - os: windows-latest-arm64
             platform: windows
             go-platform: windows
             go-arch: arm64
@@ -54,7 +54,7 @@ jobs:
             cli-archive-name: Fast-Duplicate-Finder-command-line-windows-arm64.zip
             flutter-build-path: build/windows/arm64/runner/Release
             flutter-target: windows-arm64
-            cc: aarch64-w64-mingw32-clang
+            cc: clang
           - os: macos-13
             platform: macos
             go-platform: darwin
@@ -98,11 +98,6 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev gcc-aarch64-linux-gnu gcc-mingw-w64
         shell: bash
 
-      - name: Install llvm-mingw for Windows ARM64 build
-        if: runner.os == 'Windows' && matrix.go-arch == 'arm64'
-        run: choco install llvm-mingw --no-progress
-        shell: pwsh
-      
       - name: Build Command-Line Interface
         env:
           CC: ${{ matrix.cc }}
