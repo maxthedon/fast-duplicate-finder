@@ -45,6 +45,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+          cache-dependency-path: backend/go.sum
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
