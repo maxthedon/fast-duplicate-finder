@@ -114,10 +114,26 @@ jobs:
           ./scripts/build_and_deploy.sh --platform ${{ matrix.go-platform }} --arch ${{ matrix.go-arch }}
         shell: bash
 
+      - name: Clean Native Libraries for Build
+        run: |
+          cd flutter_app/fastdupefinder/lib/native
+          if [ "${{ matrix.platform }}" == "macos" ]; then
+            find . -type f ! -name "*.dylib" ! -name "*.h" -delete
+          elif [ "${{ matrix.platform }}" == "linux" ]; then
+            find . -type f ! -name "*.so" ! -name "*.h" -delete
+          elif [ "${{ matrix.platform }}" == "windows" ]; then
+            find . -type f ! -name "*.dll" ! -name "*.h" -delete
+          fi
+        shell: bash
+
       - name: Build Flutter Desktop Application
         run: |
           cd flutter_app/fastdupefinder
-          flutter build ${{ matrix.platform }} --release --target-platform ${{ matrix.flutter-target }}
+          if [ "${{ matrix.platform }}" == "macos" ]; then
+            flutter build macos --release
+          else
+            flutter build ${{ matrix.platform }} --release --target-platform ${{ matrix.flutter-target }}
+          fi
         shell: bash
 
       - name: Package macOS Application
