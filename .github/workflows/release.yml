@@ -35,7 +35,7 @@ jobs:
             flutter-build-path: build/linux/arm64/release/bundle
             flutter-target: linux-arm64
             cc: aarch64-linux-gnu-gcc
-          - os: ubuntu-latest
+          - os: windows-latest
             platform: windows
             go-platform: windows
             go-arch: amd64
@@ -45,7 +45,7 @@ jobs:
             flutter-build-path: build/windows/x64/runner/Release
             flutter-target: windows-x64
             cc: x86_64-w64-mingw32-gcc
-          - os: ubuntu-latest
+          - os: windows-latest
             platform: windows
             go-platform: windows
             go-arch: arm64
@@ -91,20 +91,20 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Install Build Dependencies
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install Build Dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev gcc-aarch64-linux-gnu gcc-mingw-w64
         shell: bash
 
       - name: Install llvm-mingw for Windows ARM64 build
-        if: matrix.platform == 'windows' && matrix.go-arch == 'arm64'
+        if: runner.os == 'Windows' && matrix.go-arch == 'arm64'
         run: |
-          wget https://github.com/mstorsjo/llvm-mingw/releases/download/20240519/llvm-mingw-20240519-ucrt-ubuntu-20.04-x86_64.tar.xz
-          tar -xf llvm-mingw-20240519-ucrt-ubuntu-20.04-x86_64.tar.xz
-          echo "$(pwd)/llvm-mingw-20240519-ucrt-ubuntu-20.04-x86_64/bin" >> $GITHUB_PATH
-        shell: bash
+          Invoke-WebRequest -Uri https://github.com/mstorsjo/llvm-mingw/releases/download/20240519/llvm-mingw-20240519-ucrt-win64.zip -OutFile llvm-mingw.zip
+          Expand-Archive -Path llvm-mingw.zip -DestinationPath .
+          echo "$(pwd)/llvm-mingw-20240519-ucrt-win64/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
       
       - name: Build Command-Line Interface
         env:
@@ -137,11 +137,7 @@ jobs:
       - name: Build Flutter Desktop Application
         run: |
           cd flutter_app/fastdupefinder
-          if [ "${{ matrix.platform }}" == "macos" ]; then
-            flutter build macos --release
-          else
-            flutter build ${{ matrix.platform }} --release --target-platform ${{ matrix.flutter-target }}
-          fi
+          flutter build ${{ matrix.platform }} --release
         shell: bash
 
       - name: Package macOS Application
@@ -152,7 +148,7 @@ jobs:
         shell: bash
 
       - name: Package Linux/Windows Application
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' || runner.os == 'Windows'
         run: |
           cd flutter_app/fastdupefinder
           7z a -tzip "${{ matrix.flutter-archive-name }}" "${{ matrix.flutter-build-path }}"
