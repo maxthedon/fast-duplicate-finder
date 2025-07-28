@@ -287,82 +287,91 @@ jobs:
             exit 1
           fi
           
-          # Create a launcher script that extracts and runs the app
-          cat > launcher.bat << 'EOF'
-          @echo off
-          setlocal EnableDelayedExpansion
+          echo "Windows package contents:"
+          ls -la windows_package/ | head -10
           
-          :: Get the directory where this executable is located
-          set "APP_DIR=%~dp0"
-          set "TEMP_DIR=%TEMP%\FastDupeFinder_%RANDOM%"
+          # Find 7-Zip installation directory
+          SEVENZIP_PATH=""
+          if [ -f "/c/Program Files/7-Zip/7z.exe" ]; then
+            SEVENZIP_PATH="/c/Program Files/7-Zip"
+          elif [ -f "/c/ProgramData/chocolatey/tools/7zip/7z.exe" ]; then
+            SEVENZIP_PATH="/c/ProgramData/chocolatey/tools/7zip"
+          elif [ -f "/c/ProgramData/chocolatey/lib/7zip/tools/7z.exe" ]; then
+            SEVENZIP_PATH="/c/ProgramData/chocolatey/lib/7zip/tools"
+          else
+            echo "7-Zip not found, falling back to simple ZIP"
+            7z a -tzip "${{ matrix.gui-archive }}" windows_package/*
+            echo "Windows GUI packaged as ZIP: ${{ matrix.gui-archive }}"
+            exit 0
+          fi
           
-          :: Create temporary directory
-          mkdir "%TEMP_DIR%" >nul 2>&1
+          echo "Found 7-Zip at: $SEVENZIP_PATH"
           
-          :: Extract embedded files to temp directory
-          echo Preparing Fast Duplicate Finder...
-          "%~dp0\7z.exe" x -o"%TEMP_DIR%" "%~dp0\app.7z" -y >nul 2>&1
-          
-          :: Run the application from temp directory
-          cd /d "%TEMP_DIR%"
-          start "" "%TEMP_DIR%\fastdupefinder.exe" %*
-          
-          :: Cleanup on exit (run in background)
-          start /min cmd /c "timeout /t 10 >nul & rmdir /s /q \"%TEMP_DIR%\" >nul 2>&1"
-          EOF
-          
-          # Create a simple launcher script for development/testing
+          # Create a README for users
           cat > windows_package/README.txt << 'EOF'
           Fast Duplicate Finder - Windows Portable Edition
           
-          This is a self-contained portable application similar to Linux AppImage.
+          This is a portable Windows application.
           
           To run:
-          - Simply double-click the .exe file
-          - The application will extract itself and run automatically
-          - No installation required, no files left behind
+          - Extract all files to a folder
+          - Double-click on "fastdupefinder.exe"
           
           Features:
           - Fully portable - run from any location
           - Self-contained - all dependencies included
           - No installation or admin rights required
-          - Temporary extraction - cleans up after use
           
           For command line usage, download the CLI version instead.
           EOF
           
-          # Create the 7z archive with all app files
-          "/c/Program Files/7-Zip/7z.exe" a -t7z app.7z windows_package/* -mx=9
-          
-          # Get the 7zip SFX module
-          cp "/c/Program Files/7-Zip/7zS.sfx" sfx_module.exe
-          
-          # Create config for self-extracting archive
-          cat > config.txt << 'EOF'
+          # Try to create self-extracting archive, fall back to ZIP if it fails
+          if [ -f "$SEVENZIP_PATH/7zS.sfx" ]; then
+            echo "Creating self-extracting archive..."
+            
+            # Create the 7z archive with all app files
+            "$SEVENZIP_PATH/7z.exe" a -t7z app.7z windows_package/* -mx=9
+            
+            # Get the 7zip SFX module
+            cp "$SEVENZIP_PATH/7zS.sfx" sfx_module.exe
+            
+            # Create config for self-extracting archive
+            cat > config.txt << 'EOF'
           ;!@Install@!UTF-8!
           Title="Fast Duplicate Finder"
-          BeginPrompt="Fast Duplicate Finder - Portable Application\n\nThis will extract and run Fast Duplicate Finder.\nNo installation required."
+          BeginPrompt="Fast Duplicate Finder - Portable Application\n\nThis will extract Fast Duplicate Finder to a temporary folder and run it.\nNo installation required."
           ExtractTitle="Extracting Fast Duplicate Finder..."
           ExtractDialogText="Please wait while Fast Duplicate Finder is being prepared..."
           ExtractPathText="Extracting to temporary directory..."
           ExtractCancelText="Cancel"
           RunProgram="fastdupefinder.exe"
-          Delete="%%T"
+          Delete="%TEMP%"
           ;!@InstallEnd@!
           EOF
-          
-          # Create the self-extracting executable
-          copy /b sfx_module.exe + config.txt + app.7z "${{ matrix.gui-archive }}"
-          
-          # Verify the final executable was created
-          if [ ! -f "${{ matrix.gui-archive }}" ]; then
-            echo "Error: Self-extracting executable creation failed"
-            echo "Falling back to simple ZIP package..."
-            "/c/Program Files/7-Zip/7z.exe" a -tzip "${{ matrix.gui-archive }}.zip" windows_package/*
-            mv "${{ matrix.gui-archive }}.zip" "${{ matrix.gui-archive }}"
+            
+            # Create the self-extracting executable using Windows copy command
+            cmd //c "copy /b sfx_module.exe + config.txt + app.7z ${{ matrix.gui-archive }}"
+            
+            # Verify creation succeeded
+            if [ -f "${{ matrix.gui-archive }}" ]; then
+              echo "Successfully created self-extracting executable: ${{ matrix.gui-archive }}"
+            else
+              echo "Self-extracting creation failed, falling back to ZIP"
+              "$SEVENZIP_PATH/7z.exe" a -tzip "${{ matrix.gui-archive }}" windows_package/*
+            fi
+          else
+            echo "7zS.sfx not found, creating ZIP package..."
+            "$SEVENZIP_PATH/7z.exe" a -tzip "${{ matrix.gui-archive }}" windows_package/*
           fi
           
-          echo "Windows self-contained GUI packaged: ${{ matrix.gui-archive }}"
+          # Final verification
+          if [ -f "${{ matrix.gui-archive }}" ]; then
+            echo "Windows GUI packaged successfully: ${{ matrix.gui-archive }}"
+            ls -lh "${{ matrix.gui-archive }}"
+          else
+            echo "Error: Failed to create Windows package"
+            exit 1
+          fi
         shell: bash
 
       - name: Package CLI Application
