@@ -19,8 +19,8 @@ jobs:
     strategy:
       matrix:
         include:
-          # Linux x64 - Native build on Ubuntu 20.04 for better compatibility
-          - os: ubuntu-20.04
+          # Linux x64 - Native build on Ubuntu 22.04 for good compatibility
+          - os: ubuntu-22.04
             platform: linux
             arch: x64
             go-os: linux
@@ -39,7 +39,7 @@ jobs:
             go-os: windows
             go-arch: amd64
             cli-executable: fast-duplicate-finder.exe
-            gui-archive: Fast-Duplicate-Finder-Windows-x64-Portable.exe
+            gui-archive: Fast-Duplicate-Finder-Windows-x64.zip
             gui-zip-archive: Fast-Duplicate-Finder-Windows-x64-Portable.zip
             cli-archive: Fast-Duplicate-Finder-Windows-x64-CLI.zip
             flutter-build-path: build/windows/x64/runner/Release
@@ -369,10 +369,10 @@ jobs:
           echo "macOS GUI ZIP packaged: ${{ matrix.gui-zip-archive }}"
         shell: bash
 
-      - name: Package GUI Application (Windows - Portable EXE)
+      - name: Package GUI Application (Windows - Portable ZIP)
         if: runner.os == 'Windows'
         run: |
-          echo "Creating portable EXE for Windows..."
+          echo "Creating portable ZIP for Windows..."
           cd flutter_app/fastdupefinder
           
           # Verify the Flutter build output exists
@@ -385,12 +385,8 @@ jobs:
           echo "Flutter build contents:"
           ls -la "${{ matrix.flutter-build-path }}/" | head -10
           
-          # Create a simple portable EXE using the Flutter executable directly
-          # First, just copy the main executable as a portable version
-          echo "Creating portable executable..."
-          
-          # Method 1: Create a simple batch wrapper that extracts and runs
-          # This creates a self-contained executable that can run from anywhere
+          # Create a portable Windows package
+          echo "Creating portable package..."
           
           # Create a temporary directory for packaging
           mkdir -p windows_portable
@@ -412,8 +408,8 @@ jobs:
           This is a portable Windows application that requires no installation.
           
           To use:
-          1. Extract all files to a folder (if downloaded as ZIP)
-          2. Double-click "fastdupefinder.exe" to run the application
+          1. Extract all files from the ZIP to a folder
+          2. Double-click on "fastdupefinder.exe" to run the application
           
           Features:
           - Fully portable - run from any location
@@ -422,6 +418,17 @@ jobs:
           - Can be run from USB drives
           
           All application files and dependencies are included in this package.
+          
+          For support, visit: https://github.com/maxthedon/fast-dupe-finder
+          EOF
+          
+          # Create a simple batch file launcher for convenience
+          cat > windows_portable/Run-Fast-Duplicate-Finder.bat << 'EOF'
+          @echo off
+          cd /d "%~dp0"
+          echo Starting Fast Duplicate Finder...
+          echo.
+          start "" "fastdupefinder.exe"
           EOF
           
           # Find 7-Zip installation
@@ -430,39 +437,35 @@ jobs:
             SEVENZIP_PATH="/c/Program Files/7-Zip"
           elif [ -f "/c/ProgramData/chocolatey/bin/7z.exe" ]; then
             SEVENZIP_PATH="/c/ProgramData/chocolatey/bin"
-            SEVENZIP_EXE="7z.exe"
           elif [ -f "/c/ProgramData/chocolatey/lib/7zip/tools/7z.exe" ]; then
             SEVENZIP_PATH="/c/ProgramData/chocolatey/lib/7zip/tools"
-            SEVENZIP_EXE="7z.exe"
           elif command -v 7z >/dev/null 2>&1; then
             # Use system 7z if available
             echo "Using system 7z command"
-            7z a -tzip "${{ matrix.gui-archive }}" windows_portable/*
-            echo "Created ZIP-based portable package: ${{ matrix.gui-archive }}"
           else
-            echo "7-Zip not found, creating simple ZIP"
-            # Fallback to PowerShell Compress-Archive if 7z not available
-            powershell -Command "Compress-Archive -Path 'windows_portable/*' -DestinationPath '${{ matrix.gui-archive }}'"
+            echo "7-Zip not found, using PowerShell compression"
           fi
           
-          # If 7-Zip was found with specific path, use it
+          # Create the main GUI ZIP package
+          echo "Creating main GUI ZIP package for Windows..."
           if [ -n "$SEVENZIP_PATH" ]; then
             echo "Found 7-Zip at: $SEVENZIP_PATH"
             "$SEVENZIP_PATH/7z.exe" a -tzip "${{ matrix.gui-archive }}" windows_portable/*
+          elif command -v 7z >/dev/null 2>&1; then
+            7z a -tzip "${{ matrix.gui-archive }}" windows_portable/*
+          else
+            # Fallback to PowerShell Compress-Archive
+            powershell -Command "Compress-Archive -Path 'windows_portable\*' -DestinationPath '${{ matrix.gui-archive }}' -Force"
           fi
           
-          # For now, the "EXE" will actually be a ZIP file containing the portable app
-          # This makes it easy to distribute and extract
-          # Users can rename it to .zip if needed
-          
-          # Create GUI ZIP package (this is the same as above but with different name)
-          echo "Creating GUI ZIP package for Windows..."
+          # Create the portable ZIP package (same content, different name for clarity)
+          echo "Creating portable ZIP package for Windows..."
           if [ -n "$SEVENZIP_PATH" ]; then
             "$SEVENZIP_PATH/7z.exe" a -tzip "${{ matrix.gui-zip-archive }}" windows_portable/*
           elif command -v 7z >/dev/null 2>&1; then
             7z a -tzip "${{ matrix.gui-zip-archive }}" windows_portable/*
           else
-            powershell -Command "Compress-Archive -Path 'windows_portable/*' -DestinationPath '${{ matrix.gui-zip-archive }}'"
+            powershell -Command "Compress-Archive -Path 'windows_portable\*' -DestinationPath '${{ matrix.gui-zip-archive }}' -Force"
           fi
           
           # Verify packages were created
@@ -476,6 +479,8 @@ jobs:
               "$SEVENZIP_PATH/7z.exe" l "${{ matrix.gui-archive }}" | head -20
             elif command -v 7z >/dev/null 2>&1; then
               7z l "${{ matrix.gui-archive }}" | head -20
+            else
+              echo "Contents: Flutter app files + README.txt + launcher batch file"
             fi
           else
             echo "Error: Failed to create Windows GUI package"
@@ -483,10 +488,10 @@ jobs:
           fi
           
           if [ -f "${{ matrix.gui-zip-archive }}" ]; then
-            echo "Windows GUI ZIP packaged: ${{ matrix.gui-zip-archive }}"
+            echo "Windows GUI portable ZIP packaged: ${{ matrix.gui-zip-archive }}"
             ls -lh "${{ matrix.gui-zip-archive }}"
           else
-            echo "Error: Failed to create Windows GUI ZIP package"
+            echo "Error: Failed to create Windows GUI portable ZIP package"
             exit 1
           fi
         shell: bash
@@ -521,8 +526,8 @@ jobs:
             - **`Fast-Duplicate-Finder-Linux-x64-CLI.zip`** - Command-line version for scripts
             
             ### 🪟 Windows  
-            - **`Fast-Duplicate-Finder-Windows-x64-Portable.exe`** - Portable ZIP package (rename to .zip to extract)
-            - **`Fast-Duplicate-Finder-Windows-x64-Portable.zip`** - Extract and run anywhere
+            - **`Fast-Duplicate-Finder-Windows-x64.zip`** - Main Windows package (extract and run)
+            - **`Fast-Duplicate-Finder-Windows-x64-Portable.zip`** - Portable version (same content)
             - **`Fast-Duplicate-Finder-Windows-x64-CLI.zip`** - Command-line version for scripts
             
             ### 🍎 macOS
@@ -541,9 +546,9 @@ jobs:
             3. Run: `./Fast-Duplicate-Finder-Linux-x64.AppImage`
             
             ### Windows
-            1. Download `Fast-Duplicate-Finder-Windows-x64-Portable.zip`
+            1. Download `Fast-Duplicate-Finder-Windows-x64.zip`
             2. Extract all files to a folder
-            3. Run `fastdupefinder.exe`
+            3. Run `fastdupefinder.exe` or double-click `Run-Fast-Duplicate-Finder.bat`
             
             ### macOS
             1. Download the appropriate `.dmg` file for your Mac
@@ -552,7 +557,7 @@ jobs:
             
             ## 🔧 Technical Details
             
-            - **Linux**: Built on Ubuntu 20.04 for maximum compatibility (GLIBC 2.31+)
+            - **Linux**: Built on Ubuntu 22.04 for good compatibility (GLIBC 2.35+)
             - **Windows**: Portable applications require no installation
             - **macOS**: Native builds optimized for Intel and Apple Silicon processors
             
