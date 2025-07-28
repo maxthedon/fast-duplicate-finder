@@ -19,16 +19,16 @@ jobs:
     strategy:
       matrix:
         include:
-          # Linux x64 - Native build on Ubuntu
-          - os: ubuntu-latest
+          # Linux x64 - Native build on Ubuntu 20.04 for better compatibility
+          - os: ubuntu-20.04
             platform: linux
             arch: x64
             go-os: linux
             go-arch: amd64
             cli-executable: fast-duplicate-finder
-            gui-archive: fast-duplicate-finder-linux-x64.AppImage
-            gui-zip-archive: fast-duplicate-finder-gui-linux-x64.zip
-            cli-archive: fast-duplicate-finder-cli-linux-x64.zip
+            gui-archive: Fast-Duplicate-Finder-Linux-x64.AppImage
+            gui-zip-archive: Fast-Duplicate-Finder-Linux-x64-Portable.zip
+            cli-archive: Fast-Duplicate-Finder-Linux-x64-CLI.zip
             flutter-build-path: build/linux/x64/release/bundle
             cc: gcc
             
@@ -39,9 +39,9 @@ jobs:
             go-os: windows
             go-arch: amd64
             cli-executable: fast-duplicate-finder.exe
-            gui-archive: fast-duplicate-finder-windows-x64.exe
-            gui-zip-archive: fast-duplicate-finder-gui-windows-x64.zip
-            cli-archive: fast-duplicate-finder-cli-windows-x64.zip
+            gui-archive: Fast-Duplicate-Finder-Windows-x64-Portable.exe
+            gui-zip-archive: Fast-Duplicate-Finder-Windows-x64-Portable.zip
+            cli-archive: Fast-Duplicate-Finder-Windows-x64-CLI.zip
             flutter-build-path: build/windows/x64/runner/Release
             cc: x86_64-w64-mingw32-gcc
             
@@ -52,9 +52,9 @@ jobs:
             go-os: darwin
             go-arch: amd64
             cli-executable: fast-duplicate-finder
-            gui-archive: fast-duplicate-finder-macos-x64.dmg
-            gui-zip-archive: fast-duplicate-finder-gui-macos-x64.zip
-            cli-archive: fast-duplicate-finder-cli-macos-x64.zip
+            gui-archive: Fast-Duplicate-Finder-macOS-Intel.dmg
+            gui-zip-archive: Fast-Duplicate-Finder-macOS-Intel-Portable.zip
+            cli-archive: Fast-Duplicate-Finder-macOS-Intel-CLI.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             cc: clang
             
@@ -65,9 +65,9 @@ jobs:
             go-os: darwin
             go-arch: arm64
             cli-executable: fast-duplicate-finder
-            gui-archive: fast-duplicate-finder-macos-arm64.dmg
-            gui-zip-archive: fast-duplicate-finder-gui-macos-arm64.zip
-            cli-archive: fast-duplicate-finder-cli-macos-arm64.zip
+            gui-archive: Fast-Duplicate-Finder-macOS-AppleSilicon.dmg
+            gui-zip-archive: Fast-Duplicate-Finder-macOS-AppleSilicon-Portable.zip
+            cli-archive: Fast-Duplicate-Finder-macOS-AppleSilicon-CLI.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             cc: clang
 
@@ -308,11 +308,6 @@ jobs:
           # Set up XDG directories to avoid conflicts
           export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"
           
-          # Debug: Show library path (remove this in production)
-          echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH" >&2
-          echo "Checking for libglib-2.0.so.0:" >&2
-          find "${HERE}/usr" -name "libglib-2.0.so.0" 2>/dev/null >&2
-          
           # Run the application with all arguments passed through
           exec "${HERE}/usr/bin/fastdupefinder" "$@"
           EOF
@@ -516,25 +511,50 @@ jobs:
           body: |
             # Fast Duplicate Finder ${{ github.ref_name }}
             
-            Automated release build for version ${{ github.ref_name }}.
+            Fast Duplicate Finder helps you find and remove duplicate files from your system quickly and efficiently.
             
-            ## Downloads
-            - **GUI Applications**: Native desktop packages for each platform
-            - **GUI ZIP**: Portable ZIP packages for Windows and Linux
-            - **CLI Applications**: Command-line tools for scripting and automation
+            ## 📥 Downloads
             
-            ## Package Formats
-            - **Linux**: `.AppImage` (portable), `.zip` (GUI portable), and `.zip` (CLI)
-            - **Windows**: `.exe` (portable ZIP), `.zip` (GUI portable), and `.zip` (CLI)  
-            - **macOS**: `.dmg` (disk image), `.zip` (GUI portable), and `.zip` (CLI)
+            ### 🐧 Linux
+            - **`Fast-Duplicate-Finder-Linux-x64.AppImage`** - Single-file portable application (recommended)
+            - **`Fast-Duplicate-Finder-Linux-x64-Portable.zip`** - Extract and run anywhere
+            - **`Fast-Duplicate-Finder-Linux-x64-CLI.zip`** - Command-line version for scripts
             
-            ## Platform Support
-            - **Linux x64**: Native build
-            - **Windows x64**: Native build with portable ZIP packaging
-            - **macOS x64**: Native build on macOS 13
-            - **macOS ARM64**: Native build on macOS 14
+            ### 🪟 Windows  
+            - **`Fast-Duplicate-Finder-Windows-x64-Portable.exe`** - Portable ZIP package (rename to .zip to extract)
+            - **`Fast-Duplicate-Finder-Windows-x64-Portable.zip`** - Extract and run anywhere
+            - **`Fast-Duplicate-Finder-Windows-x64-CLI.zip`** - Command-line version for scripts
             
-            _Note: Linux ARM64 and Windows ARM64 support coming in future releases_
+            ### 🍎 macOS
+            - **`Fast-Duplicate-Finder-macOS-Intel.dmg`** - For Intel Macs (disk image installer)
+            - **`Fast-Duplicate-Finder-macOS-AppleSilicon.dmg`** - For M1/M2/M3 Macs (disk image installer)
+            - **`Fast-Duplicate-Finder-macOS-Intel-Portable.zip`** - Intel Macs portable version
+            - **`Fast-Duplicate-Finder-macOS-AppleSilicon-Portable.zip`** - Apple Silicon portable version
+            - **`Fast-Duplicate-Finder-macOS-Intel-CLI.zip`** - Intel Macs command-line version
+            - **`Fast-Duplicate-Finder-macOS-AppleSilicon-CLI.zip`** - Apple Silicon command-line version
+            
+            ## 🚀 Quick Start
+            
+            ### Linux
+            1. Download `Fast-Duplicate-Finder-Linux-x64.AppImage`
+            2. Make it executable: `chmod +x Fast-Duplicate-Finder-Linux-x64.AppImage`
+            3. Run: `./Fast-Duplicate-Finder-Linux-x64.AppImage`
+            
+            ### Windows
+            1. Download `Fast-Duplicate-Finder-Windows-x64-Portable.zip`
+            2. Extract all files to a folder
+            3. Run `fastdupefinder.exe`
+            
+            ### macOS
+            1. Download the appropriate `.dmg` file for your Mac
+            2. Open the DMG and drag the app to Applications
+            3. Run from Applications or Launchpad
+            
+            ## 🔧 Technical Details
+            
+            - **Linux**: Built on Ubuntu 20.04 for maximum compatibility (GLIBC 2.31+)
+            - **Windows**: Portable applications require no installation
+            - **macOS**: Native builds optimized for Intel and Apple Silicon processors
             
             Built on: ${{ steps.date.outputs.date }}
           prerelease: false
