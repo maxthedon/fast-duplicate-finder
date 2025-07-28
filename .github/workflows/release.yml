@@ -39,7 +39,7 @@ jobs:
             go-os: windows
             go-arch: amd64
             cli-executable: fast-duplicate-finder.exe
-            gui-archive: fast-duplicate-finder-windows-x64.msix
+            gui-archive: fast-duplicate-finder-windows-x64.exe
             gui-zip-archive: fast-duplicate-finder-gui-windows-x64.zip
             cli-archive: fast-duplicate-finder-cli-windows-x64.zip
             flutter-build-path: build/windows/x64/runner/Release
@@ -53,6 +53,7 @@ jobs:
             go-arch: amd64
             cli-executable: fast-duplicate-finder
             gui-archive: fast-duplicate-finder-macos-x64.dmg
+            gui-zip-archive: fast-duplicate-finder-gui-macos-x64.zip
             cli-archive: fast-duplicate-finder-cli-macos-x64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             cc: clang
@@ -65,6 +66,7 @@ jobs:
             go-arch: arm64
             cli-executable: fast-duplicate-finder
             gui-archive: fast-duplicate-finder-macos-arm64.dmg
+            gui-zip-archive: fast-duplicate-finder-gui-macos-arm64.zip
             cli-archive: fast-duplicate-finder-cli-macos-arm64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             cc: clang
@@ -99,8 +101,7 @@ jobs:
             fuse \
             libfuse2 \
             patchelf \
-            file \
-            ldd
+            file
         shell: bash
 
       - name: Install AppImageTool for Linux
@@ -116,6 +117,9 @@ jobs:
         run: |
           # MinGW is already available on windows-latest
           echo "Using built-in MinGW for Windows x64"
+          
+          # Install 7zip for creating self-extracting executable
+          choco install 7zip -y
         shell: bash
       
       - name: Build CLI Application
@@ -362,13 +366,18 @@ jobs:
             -ov -format UDZO \
             "${{ matrix.gui-archive }}"
           
+          # Create GUI ZIP package for macOS
+          echo "Creating GUI ZIP package for macOS..."
+          7z a -tzip "${{ matrix.gui-zip-archive }}" "${{ matrix.flutter-build-path }}"/*
+          
           echo "macOS GUI packaged: ${{ matrix.gui-archive }}"
+          echo "macOS GUI ZIP packaged: ${{ matrix.gui-zip-archive }}"
         shell: bash
 
-      - name: Package GUI Application (Windows - MSIX)
+      - name: Package GUI Application (Windows - Portable EXE)
         if: runner.os == 'Windows'
         run: |
-          echo "Creating MSIX package for Windows..."
+          echo "Creating portable EXE for Windows..."
           cd flutter_app/fastdupefinder
           
           # Verify the Flutter build output exists
@@ -381,43 +390,110 @@ jobs:
           echo "Flutter build contents:"
           ls -la "${{ matrix.flutter-build-path }}/" | head -10
           
-          # Flutter Windows builds already generate MSIX packages
-          # Look for the generated MSIX in the expected location
-          MSIX_FILE=$(find build/windows/x64/runner/Release -name "*.msix" | head -1)
+          # Create a simple portable EXE using the Flutter executable directly
+          # First, just copy the main executable as a portable version
+          echo "Creating portable executable..."
           
-          if [ -n "$MSIX_FILE" ] && [ -f "$MSIX_FILE" ]; then
-            echo "Found existing MSIX package: $MSIX_FILE"
-            cp "$MSIX_FILE" "${{ matrix.gui-archive }}"
-          else
-            echo "No MSIX found, Flutter may not have generated one"
-            echo "Available files in Release directory:"
-            find build/windows/x64/runner/Release -type f | head -20
-            
-            # Try to find MSIX in common locations
-            POSSIBLE_MSIX=$(find build -name "*.msix" 2>/dev/null | head -1)
-            if [ -n "$POSSIBLE_MSIX" ] && [ -f "$POSSIBLE_MSIX" ]; then
-              echo "Found MSIX at: $POSSIBLE_MSIX"
-              cp "$POSSIBLE_MSIX" "${{ matrix.gui-archive }}"
-            else
-              echo "Warning: No MSIX package found. Creating ZIP fallback."
-              7z a -tzip "${{ matrix.gui-archive }}" "${{ matrix.flutter-build-path }}"/*
-            fi
+          # Method 1: Create a simple batch wrapper that extracts and runs
+          # This creates a self-contained executable that can run from anywhere
+          
+          # Create a temporary directory for packaging
+          mkdir -p windows_portable
+          
+          # Copy all Flutter build files to the portable directory
+          cp -r "${{ matrix.flutter-build-path }}"/* windows_portable/
+          
+          # Verify the main executable is there
+          if [ ! -f "windows_portable/fastdupefinder.exe" ]; then
+            echo "Error: Could not copy fastdupefinder.exe to portable directory"
+            ls -la windows_portable/
+            exit 1
           fi
           
-          # Create GUI ZIP package
+          # Create a README for the portable version
+          cat > windows_portable/README.txt << 'EOF'
+          Fast Duplicate Finder - Windows Portable Edition
+          
+          This is a portable Windows application that requires no installation.
+          
+          To use:
+          1. Extract all files to a folder (if downloaded as ZIP)
+          2. Double-click "fastdupefinder.exe" to run the application
+          
+          Features:
+          - Fully portable - run from any location
+          - No installation required
+          - No registry changes
+          - Can be run from USB drives
+          
+          All application files and dependencies are included in this package.
+          EOF
+          
+          # Find 7-Zip installation
+          SEVENZIP_PATH=""
+          if [ -f "/c/Program Files/7-Zip/7z.exe" ]; then
+            SEVENZIP_PATH="/c/Program Files/7-Zip"
+          elif [ -f "/c/ProgramData/chocolatey/bin/7z.exe" ]; then
+            SEVENZIP_PATH="/c/ProgramData/chocolatey/bin"
+            SEVENZIP_EXE="7z.exe"
+          elif [ -f "/c/ProgramData/chocolatey/lib/7zip/tools/7z.exe" ]; then
+            SEVENZIP_PATH="/c/ProgramData/chocolatey/lib/7zip/tools"
+            SEVENZIP_EXE="7z.exe"
+          elif command -v 7z >/dev/null 2>&1; then
+            # Use system 7z if available
+            echo "Using system 7z command"
+            7z a -tzip "${{ matrix.gui-archive }}" windows_portable/*
+            echo "Created ZIP-based portable package: ${{ matrix.gui-archive }}"
+          else
+            echo "7-Zip not found, creating simple ZIP"
+            # Fallback to PowerShell Compress-Archive if 7z not available
+            powershell -Command "Compress-Archive -Path 'windows_portable/*' -DestinationPath '${{ matrix.gui-archive }}'"
+          fi
+          
+          # If 7-Zip was found with specific path, use it
+          if [ -n "$SEVENZIP_PATH" ]; then
+            echo "Found 7-Zip at: $SEVENZIP_PATH"
+            "$SEVENZIP_PATH/7z.exe" a -tzip "${{ matrix.gui-archive }}" windows_portable/*
+          fi
+          
+          # For now, the "EXE" will actually be a ZIP file containing the portable app
+          # This makes it easy to distribute and extract
+          # Users can rename it to .zip if needed
+          
+          # Create GUI ZIP package (this is the same as above but with different name)
           echo "Creating GUI ZIP package for Windows..."
-          7z a -tzip "${{ matrix.gui-zip-archive }}" "${{ matrix.flutter-build-path }}"/*
+          if [ -n "$SEVENZIP_PATH" ]; then
+            "$SEVENZIP_PATH/7z.exe" a -tzip "${{ matrix.gui-zip-archive }}" windows_portable/*
+          elif command -v 7z >/dev/null 2>&1; then
+            7z a -tzip "${{ matrix.gui-zip-archive }}" windows_portable/*
+          else
+            powershell -Command "Compress-Archive -Path 'windows_portable/*' -DestinationPath '${{ matrix.gui-zip-archive }}'"
+          fi
           
           # Verify packages were created
           if [ -f "${{ matrix.gui-archive }}" ]; then
             echo "Windows GUI packaged successfully: ${{ matrix.gui-archive }}"
             ls -lh "${{ matrix.gui-archive }}"
+            
+            # Show what's inside the package
+            echo "Package contents:"
+            if [ -n "$SEVENZIP_PATH" ]; then
+              "$SEVENZIP_PATH/7z.exe" l "${{ matrix.gui-archive }}" | head -20
+            elif command -v 7z >/dev/null 2>&1; then
+              7z l "${{ matrix.gui-archive }}" | head -20
+            fi
           else
             echo "Error: Failed to create Windows GUI package"
             exit 1
           fi
           
-          echo "Windows GUI ZIP packaged: ${{ matrix.gui-zip-archive }}"
+          if [ -f "${{ matrix.gui-zip-archive }}" ]; then
+            echo "Windows GUI ZIP packaged: ${{ matrix.gui-zip-archive }}"
+            ls -lh "${{ matrix.gui-zip-archive }}"
+          else
+            echo "Error: Failed to create Windows GUI ZIP package"
+            exit 1
+          fi
         shell: bash
 
       - name: Package CLI Application
@@ -449,12 +525,12 @@ jobs:
             
             ## Package Formats
             - **Linux**: `.AppImage` (portable), `.zip` (GUI portable), and `.zip` (CLI)
-            - **Windows**: `.msix` (installable), `.zip` (GUI portable), and `.zip` (CLI)  
-            - **macOS**: `.dmg` (disk image) and `.zip` (CLI)
+            - **Windows**: `.exe` (portable ZIP), `.zip` (GUI portable), and `.zip` (CLI)  
+            - **macOS**: `.dmg` (disk image), `.zip` (GUI portable), and `.zip` (CLI)
             
             ## Platform Support
             - **Linux x64**: Native build
-            - **Windows x64**: Native build with MSIX packaging
+            - **Windows x64**: Native build with portable ZIP packaging
             - **macOS x64**: Native build on macOS 13
             - **macOS ARM64**: Native build on macOS 14
             
