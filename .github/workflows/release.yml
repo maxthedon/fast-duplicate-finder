@@ -26,6 +26,7 @@ jobs:
             cli-archive: fast-duplicate-finder-cli-linux-x64.zip
             flutter-build-path: build/linux/x64/release/bundle
             flutter-target: linux-x64
+            flutter-channel: stable
             cc: gcc
             
           # Windows x64 - MinGW build on Windows
@@ -39,9 +40,10 @@ jobs:
             cli-archive: fast-duplicate-finder-cli-windows-x64.zip
             flutter-build-path: build/windows/x64/runner/Release
             flutter-target: windows-x64
+            flutter-channel: stable
             cc: x86_64-w64-mingw32-gcc
             
-          # Windows ARM64 - LLVM MinGW build on Windows
+          # Windows ARM64 - LLVM MinGW build on Windows (requires master channel)
           - os: windows-latest
             platform: windows
             arch: arm64
@@ -52,6 +54,7 @@ jobs:
             cli-archive: fast-duplicate-finder-cli-windows-arm64.zip
             flutter-build-path: build/windows/arm64/runner/Release
             flutter-target: windows-arm64
+            flutter-channel: master
             cc: aarch64-w64-mingw32-clang
             use-llvm-mingw: true
             
@@ -65,7 +68,7 @@ jobs:
             gui-archive: fast-duplicate-finder-macos-x64.zip
             cli-archive: fast-duplicate-finder-cli-macos-x64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
-            flutter-target: macos-x64
+            flutter-channel: stable
             cc: clang
             
           # macOS ARM64 - Native build on macOS 14
@@ -78,7 +81,7 @@ jobs:
             gui-archive: fast-duplicate-finder-macos-arm64.zip
             cli-archive: fast-duplicate-finder-cli-macos-arm64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
-            flutter-target: macos-arm64
+            flutter-channel: stable
             cc: clang
 
     steps:
@@ -94,7 +97,7 @@ jobs:
       - name: Setup Flutter Environment
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: ${{ matrix.flutter-channel || 'stable' }}
 
       - name: Install Linux Build Dependencies
         if: runner.os == 'Linux'
@@ -178,7 +181,15 @@ jobs:
         run: |
           echo "Building Flutter GUI for ${{ matrix.platform }}-${{ matrix.arch }}..."
           cd flutter_app/fastdupefinder
-          flutter build ${{ matrix.platform }} --release --target-platform ${{ matrix.flutter-target }}
+          
+          if [ "${{ matrix.platform }}" == "windows" ]; then
+            # Windows supports --target-platform flag
+            flutter build windows --release --target-platform ${{ matrix.flutter-target }}
+          else
+            # macOS and Linux use standard build without --target-platform
+            flutter build ${{ matrix.platform }} --release
+          fi
+          
           echo "Flutter GUI build completed"
         shell: bash
 
