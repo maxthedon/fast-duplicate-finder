@@ -1,5 +1,9 @@
 # Build and Release Fast Duplicate Finder
 # Creates GitHub releases for Windows, macOS, and Linux when a tag starting with 'v' is pushed
+#
+# TODO: Add support for additional architectures in future releases:
+# - Linux ARM64: Cross-compilation from Ubuntu x64
+# - Windows ARM64: LLVM MinGW cross-compilation (requires Flutter master channel)
 
 name: Build and Release
 
@@ -42,21 +46,6 @@ jobs:
             flutter-target: windows-x64
             flutter-channel: stable
             cc: x86_64-w64-mingw32-gcc
-            
-          # Windows ARM64 - LLVM MinGW build on Windows (requires master channel)
-          - os: windows-latest
-            platform: windows
-            arch: arm64
-            go-os: windows
-            go-arch: arm64
-            cli-executable: fast-duplicate-finder.exe
-            gui-archive: fast-duplicate-finder-windows-arm64.zip
-            cli-archive: fast-duplicate-finder-cli-windows-arm64.zip
-            flutter-build-path: build/windows/arm64/runner/Release
-            flutter-target: windows-arm64
-            flutter-channel: master
-            cc: aarch64-w64-mingw32-clang
-            use-llvm-mingw: true
             
           # macOS x64 - Native build on macOS 13
           - os: macos-13
@@ -114,27 +103,11 @@ jobs:
         shell: bash
 
       - name: Install Windows Build Dependencies
-        if: runner.os == 'Windows' && !matrix.use-llvm-mingw
+        if: runner.os == 'Windows'
         run: |
           # MinGW is already available on windows-latest
           echo "Using built-in MinGW for Windows x64"
         shell: bash
-
-      - name: Install LLVM MinGW for Windows ARM64
-        if: runner.os == 'Windows' && matrix.use-llvm-mingw
-        run: |
-          Write-Host "Downloading LLVM MinGW for ARM64 cross-compilation..."
-          $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250709/llvm-mingw-20250709-ucrt-x86_64.zip"
-          $output = "llvm-mingw.zip"
-          
-          Invoke-WebRequest -Uri $url -OutFile $output
-          Expand-Archive -Path $output -DestinationPath "C:\"
-          
-          $mingwPath = "C:\llvm-mingw-20250709-ucrt-x86_64\bin"
-          Add-Content -Path $env:GITHUB_PATH -Value $mingwPath
-          
-          Write-Host "LLVM MinGW installed and added to PATH"
-        shell: pwsh
       
       - name: Build CLI Application
         env:
@@ -236,9 +209,10 @@ jobs:
             ## Platform Support
             - **Linux x64**: Native build
             - **Windows x64**: MinGW build  
-            - **Windows ARM64**: LLVM MinGW cross-compilation
             - **macOS x64**: Native build on macOS 13
             - **macOS ARM64**: Native build on macOS 14
+            
+            _Note: Linux ARM64 and Windows ARM64 support coming in future releases_
             
             Built on: ${{ steps.date.outputs.date }}
           prerelease: false
