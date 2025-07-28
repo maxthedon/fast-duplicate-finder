@@ -38,7 +38,7 @@ jobs:
             go-os: windows
             go-arch: amd64
             cli-executable: fast-duplicate-finder.exe
-            gui-archive: fast-duplicate-finder-windows-x64.msix
+            gui-archive: fast-duplicate-finder-windows-x64.exe
             cli-archive: fast-duplicate-finder-cli-windows-x64.zip
             flutter-build-path: build/windows/x64/runner/Release
             cc: x86_64-w64-mingw32-gcc
@@ -111,6 +111,9 @@ jobs:
         run: |
           # MinGW is already available on windows-latest
           echo "Using built-in MinGW for Windows x64"
+          
+          # Install 7zip for self-extracting archive creation
+          choco install 7zip -y
         shell: bash
       
       - name: Build CLI Application
@@ -175,9 +178,21 @@ jobs:
           mkdir -p AppDir/usr/bin
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/lib
           
-          # Copy the Flutter app
+          # Copy the Flutter app bundle - preserve the structure for library loading
           cp -r "${{ matrix.flutter-build-path }}"/* AppDir/usr/bin/
+          
+          # The main executable should be directly accessible as 'fastdupefinder'
+          # Flutter Linux builds put the executable in the bundle root
+          if [ ! -f "AppDir/usr/bin/fastdupefinder" ]; then
+            echo "Error: fastdupefinder executable not found in bundle"
+            ls -la AppDir/usr/bin/
+            exit 1
+          fi
+          
+          # Make sure the executable is actually executable
+          chmod +x AppDir/usr/bin/fastdupefinder
           
           # Create desktop file
           cat > AppDir/usr/share/applications/fastdupefinder.desktop << EOF
@@ -186,25 +201,47 @@ jobs:
           Name=Fast Duplicate Finder
           Exec=fastdupefinder
           Icon=fastdupefinder
-          Categories=Utility;
+          Categories=Utility;FileTools;
+          Comment=Find and remove duplicate files
           EOF
           
-          # Create a simple icon (you should replace this with your actual icon)
-          convert -size 256x256 xc:blue AppDir/usr/share/icons/hicolor/256x256/apps/fastdupefinder.png || echo "Using placeholder icon"
+          # Create a simple icon (using ImageMagick convert or fallback)
+          if command -v convert >/dev/null 2>&1; then
+            convert -size 256x256 xc:'#4A90E2' -pointsize 72 -fill white -gravity center -annotate +0+0 'FDF' AppDir/usr/share/icons/hicolor/256x256/apps/fastdupefinder.png
+          else
+            # Create a simple PNG without ImageMagick
+            echo "No ImageMagick, creating minimal icon file"
+            touch AppDir/usr/share/icons/hicolor/256x256/apps/fastdupefinder.png
+          fi
           
-          # Create AppRun script
+          # Create AppRun script that properly sets up the environment
           cat > AppDir/AppRun << 'EOF'
           #!/bin/bash
           HERE="$(dirname "$(readlink -f "${0}")")"
+          
+          # Set up library path so the app can find its dependencies
+          export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          
+          # Set up data directory for flutter assets
+          export FLUTTER_ASSETS_DIR="${HERE}/usr/bin/data"
+          
+          # Run the application with all arguments passed through
           exec "${HERE}/usr/bin/fastdupefinder" "$@"
           EOF
           chmod +x AppDir/AppRun
+          
+          # Verify the structure before creating AppImage
+          echo "AppDir structure:"
+          find AppDir -type f -executable | head -10
+          echo "Checking if fastdupefinder is executable:"
+          file AppDir/usr/bin/fastdupefinder
           
           # Create the AppImage
           appimagetool AppDir "${{ matrix.gui-archive }}" || echo "AppImage creation failed, falling back to tar.gz"
           
           # Fallback to tar.gz if AppImage creation fails
           if [ ! -f "${{ matrix.gui-archive }}" ]; then
+            echo "AppImage creation failed, creating tar.gz fallback"
             tar -czf "$(basename ${{ matrix.gui-archive}} .AppImage).tar.gz" -C "${{ matrix.flutter-build-path }}" .
             mv "$(basename ${{ matrix.gui-archive}} .AppImage).tar.gz" "${{ matrix.gui-archive }}"
           fi
@@ -231,22 +268,101 @@ jobs:
           echo "macOS GUI packaged: ${{ matrix.gui-archive }}"
         shell: bash
 
-      - name: Package GUI Application (Windows - MSIX)
+      - name: Package GUI Application (Windows - Self-Contained EXE)
         if: runner.os == 'Windows'
         run: |
-          echo "Creating MSIX package for Windows..."
+          echo "Creating self-contained EXE for Windows (similar to AppImage)..."
           cd flutter_app/fastdupefinder
           
-          # Flutter should have built MSIX if configured, fallback to ZIP if not
-          if [ -f "build/windows/x64/runner/Release/fastdupefinder.msix" ]; then
-            cp "build/windows/x64/runner/Release/fastdupefinder.msix" "${{ matrix.gui-archive }}"
-          else
-            echo "MSIX not found, creating ZIP fallback..."
-            7z a -tzip "${{ matrix.gui-archive }}.zip" "${{ matrix.flutter-build-path }}"
+          # Create a clean directory for the Windows package
+          mkdir -p windows_package
+          
+          # Copy the entire Flutter build output
+          cp -r "${{ matrix.flutter-build-path }}"/* windows_package/
+          
+          # Verify the main executable exists
+          if [ ! -f "windows_package/fastdupefinder.exe" ]; then
+            echo "Error: fastdupefinder.exe not found in build output"
+            ls -la windows_package/
+            exit 1
+          fi
+          
+          # Create a launcher script that extracts and runs the app
+          cat > launcher.bat << 'EOF'
+          @echo off
+          setlocal EnableDelayedExpansion
+          
+          :: Get the directory where this executable is located
+          set "APP_DIR=%~dp0"
+          set "TEMP_DIR=%TEMP%\FastDupeFinder_%RANDOM%"
+          
+          :: Create temporary directory
+          mkdir "%TEMP_DIR%" >nul 2>&1
+          
+          :: Extract embedded files to temp directory
+          echo Preparing Fast Duplicate Finder...
+          "%~dp0\7z.exe" x -o"%TEMP_DIR%" "%~dp0\app.7z" -y >nul 2>&1
+          
+          :: Run the application from temp directory
+          cd /d "%TEMP_DIR%"
+          start "" "%TEMP_DIR%\fastdupefinder.exe" %*
+          
+          :: Cleanup on exit (run in background)
+          start /min cmd /c "timeout /t 10 >nul & rmdir /s /q \"%TEMP_DIR%\" >nul 2>&1"
+          EOF
+          
+          # Create a simple launcher script for development/testing
+          cat > windows_package/README.txt << 'EOF'
+          Fast Duplicate Finder - Windows Portable Edition
+          
+          This is a self-contained portable application similar to Linux AppImage.
+          
+          To run:
+          - Simply double-click the .exe file
+          - The application will extract itself and run automatically
+          - No installation required, no files left behind
+          
+          Features:
+          - Fully portable - run from any location
+          - Self-contained - all dependencies included
+          - No installation or admin rights required
+          - Temporary extraction - cleans up after use
+          
+          For command line usage, download the CLI version instead.
+          EOF
+          
+          # Create the 7z archive with all app files
+          "/c/Program Files/7-Zip/7z.exe" a -t7z app.7z windows_package/* -mx=9
+          
+          # Get the 7zip SFX module
+          cp "/c/Program Files/7-Zip/7zS.sfx" sfx_module.exe
+          
+          # Create config for self-extracting archive
+          cat > config.txt << 'EOF'
+          ;!@Install@!UTF-8!
+          Title="Fast Duplicate Finder"
+          BeginPrompt="Fast Duplicate Finder - Portable Application\n\nThis will extract and run Fast Duplicate Finder.\nNo installation required."
+          ExtractTitle="Extracting Fast Duplicate Finder..."
+          ExtractDialogText="Please wait while Fast Duplicate Finder is being prepared..."
+          ExtractPathText="Extracting to temporary directory..."
+          ExtractCancelText="Cancel"
+          RunProgram="fastdupefinder.exe"
+          Delete="%%T"
+          ;!@InstallEnd@!
+          EOF
+          
+          # Create the self-extracting executable
+          copy /b sfx_module.exe + config.txt + app.7z "${{ matrix.gui-archive }}"
+          
+          # Verify the final executable was created
+          if [ ! -f "${{ matrix.gui-archive }}" ]; then
+            echo "Error: Self-extracting executable creation failed"
+            echo "Falling back to simple ZIP package..."
+            "/c/Program Files/7-Zip/7z.exe" a -tzip "${{ matrix.gui-archive }}.zip" windows_package/*
             mv "${{ matrix.gui-archive }}.zip" "${{ matrix.gui-archive }}"
           fi
           
-          echo "Windows GUI packaged: ${{ matrix.gui-archive }}"
+          echo "Windows self-contained GUI packaged: ${{ matrix.gui-archive }}"
         shell: bash
 
       - name: Package CLI Application
@@ -276,12 +392,12 @@ jobs:
             
             ## Package Formats
             - **Linux**: `.AppImage` (portable) and `.zip` (CLI)
-            - **Windows**: `.msix` (Microsoft Store format) and `.zip` (CLI)  
+            - **Windows**: `.exe` (self-contained portable) and `.zip` (CLI)  
             - **macOS**: `.dmg` (disk image) and `.zip` (CLI)
             
             ## Platform Support
             - **Linux x64**: Native build
-            - **Windows x64**: MinGW build  
+            - **Windows x64**: MinGW build (self-contained EXE)
             - **macOS x64**: Native build on macOS 13
             - **macOS ARM64**: Native build on macOS 14
             
