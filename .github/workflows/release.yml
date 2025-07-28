@@ -97,7 +97,10 @@ jobs:
             gcc \
             build-essential \
             fuse \
-            libfuse2
+            libfuse2 \
+            patchelf \
+            file \
+            ldd
         shell: bash
 
       - name: Install AppImageTool for Linux
@@ -193,6 +196,65 @@ jobs:
           # Make sure the executable is actually executable
           chmod +x AppDir/usr/bin/fastdupefinder
           
+          # Check what libraries the executable depends on
+          echo "Checking dependencies of fastdupefinder:"
+          ldd AppDir/usr/bin/fastdupefinder | head -20
+          
+          # Copy essential system libraries that might not be available on target systems
+          echo "Bundling essential libraries..."
+          mkdir -p AppDir/usr/lib/x86_64-linux-gnu
+          
+          # Function to copy library and its dependencies
+          copy_lib() {
+            local lib_path="$1"
+            local lib_name=$(basename "$lib_path")
+            
+            if [ -f "$lib_path" ] && [ ! -f "AppDir/usr/lib/x86_64-linux-gnu/$lib_name" ]; then
+              echo "Copying library: $lib_name"
+              cp "$lib_path" "AppDir/usr/lib/x86_64-linux-gnu/"
+              
+              # Make sure it's executable
+              chmod +x "AppDir/usr/lib/x86_64-linux-gnu/$lib_name"
+            fi
+          }
+          
+          # Copy critical libraries that Flutter apps often need
+          # These libraries are commonly missing or have version mismatches
+          for lib in \
+            "/lib/x86_64-linux-gnu/libglib-2.0.so.0" \
+            "/lib/x86_64-linux-gnu/libgobject-2.0.so.0" \
+            "/lib/x86_64-linux-gnu/libgio-2.0.so.0" \
+            "/lib/x86_64-linux-gnu/libgmodule-2.0.so.0" \
+            "/lib/x86_64-linux-gnu/libpcre2-8.so.0" \
+            "/lib/x86_64-linux-gnu/libffi.so.8" \
+            "/lib/x86_64-linux-gnu/libmount.so.1" \
+            "/lib/x86_64-linux-gnu/libselinux.so.1" \
+            "/lib/x86_64-linux-gnu/libblkid.so.1" \
+            "/usr/lib/x86_64-linux-gnu/libgtk-3.so.0" \
+            "/usr/lib/x86_64-linux-gnu/libgdk-3.so.0" \
+            "/usr/lib/x86_64-linux-gnu/libcairo-gobject.so.2" \
+            "/usr/lib/x86_64-linux-gnu/libcairo.so.2" \
+            "/usr/lib/x86_64-linux-gnu/libgdk_pixbuf-2.0.so.0" \
+            "/usr/lib/x86_64-linux-gnu/libpango-1.0.so.0" \
+            "/usr/lib/x86_64-linux-gnu/libharfbuzz.so.0" \
+            "/usr/lib/x86_64-linux-gnu/libatk-1.0.so.0" \
+            "/usr/lib/x86_64-linux-gnu/libepoxy.so.0"; do
+            
+            if [ -f "$lib" ]; then
+              copy_lib "$lib"
+            else
+              echo "Library not found: $lib"
+            fi
+          done
+          
+          # Also copy any libraries that the executable directly depends on
+          echo "Copying direct dependencies..."
+          ldd AppDir/usr/bin/fastdupefinder | grep -E "=> (/lib|/usr/lib)" | awk '{print $3}' | while read lib; do
+            if [ -f "$lib" ] && [[ "$lib" == *"libglib"* ]] || [[ "$lib" == *"libgobject"* ]] || [[ "$lib" == *"libgio"* ]] || [[ "$lib" == *"libgtk"* ]] || [[ "$lib" == *"libgdk"* ]]; then
+              copy_lib "$lib"
+            fi
+          done
+          
           # Create desktop file in the root of AppDir (required by appimagetool)
           cat > AppDir/fastdupefinder.desktop << EOF
           [Desktop Entry]
@@ -233,19 +295,30 @@ jobs:
           HERE="$(dirname "$(readlink -f "${0}")")"
           
           # Set up library path so the app can find its dependencies
-          export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          # Include both the Flutter lib directory and our bundled system libraries
+          export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
           
           # Set up data directory for flutter assets
           export FLUTTER_ASSETS_DIR="${HERE}/usr/bin/data"
+          
+          # Set up XDG directories to avoid conflicts
+          export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"
+          
+          # Debug: Show library path (remove this in production)
+          echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH" >&2
+          echo "Checking for libglib-2.0.so.0:" >&2
+          find "${HERE}/usr" -name "libglib-2.0.so.0" 2>/dev/null >&2
           
           # Run the application with all arguments passed through
           exec "${HERE}/usr/bin/fastdupefinder" "$@"
           EOF
           chmod +x AppDir/AppRun
           
-          # Verify the structure before creating AppImage
+          # Verify the structure and libraries before creating AppImage
           echo "AppDir structure:"
           find AppDir -type f -executable | head -10
+          echo "Bundled libraries:"
+          ls -la AppDir/usr/lib/x86_64-linux-gnu/ | head -10
           echo "Checking if fastdupefinder is executable:"
           file AppDir/usr/bin/fastdupefinder
           echo "Checking desktop file:"
