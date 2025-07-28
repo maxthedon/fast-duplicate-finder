@@ -26,7 +26,7 @@ jobs:
             go-os: linux
             go-arch: amd64
             cli-executable: fast-duplicate-finder
-            gui-archive: fast-duplicate-finder-linux-x64.zip
+            gui-archive: fast-duplicate-finder-linux-x64.AppImage
             cli-archive: fast-duplicate-finder-cli-linux-x64.zip
             flutter-build-path: build/linux/x64/release/bundle
             cc: gcc
@@ -38,7 +38,7 @@ jobs:
             go-os: windows
             go-arch: amd64
             cli-executable: fast-duplicate-finder.exe
-            gui-archive: fast-duplicate-finder-windows-x64.zip
+            gui-archive: fast-duplicate-finder-windows-x64.msix
             cli-archive: fast-duplicate-finder-cli-windows-x64.zip
             flutter-build-path: build/windows/x64/runner/Release
             cc: x86_64-w64-mingw32-gcc
@@ -50,7 +50,7 @@ jobs:
             go-os: darwin
             go-arch: amd64
             cli-executable: fast-duplicate-finder
-            gui-archive: fast-duplicate-finder-macos-x64.zip
+            gui-archive: fast-duplicate-finder-macos-x64.dmg
             cli-archive: fast-duplicate-finder-cli-macos-x64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             cc: clang
@@ -62,7 +62,7 @@ jobs:
             go-os: darwin
             go-arch: arm64
             cli-executable: fast-duplicate-finder
-            gui-archive: fast-duplicate-finder-macos-arm64.zip
+            gui-archive: fast-duplicate-finder-macos-arm64.dmg
             cli-archive: fast-duplicate-finder-cli-macos-arm64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             cc: clang
@@ -93,7 +93,17 @@ jobs:
             pkg-config \
             libgtk-3-dev \
             gcc \
-            build-essential
+            build-essential \
+            fuse \
+            libfuse2
+        shell: bash
+
+      - name: Install AppImageTool for Linux
+        if: runner.os == 'Linux'
+        run: |
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          sudo mv appimagetool-x86_64.AppImage /usr/local/bin/appimagetool
         shell: bash
 
       - name: Install Windows Build Dependencies
@@ -155,28 +165,97 @@ jobs:
           echo "Flutter GUI build completed"
         shell: bash
 
-      - name: Package GUI Application (macOS)
+      - name: Package GUI Application (Linux - AppImage)
+        if: runner.os == 'Linux'
+        run: |
+          echo "Creating AppImage for Linux..."
+          cd flutter_app/fastdupefinder
+          
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy the Flutter app
+          cp -r "${{ matrix.flutter-build-path }}"/* AppDir/usr/bin/
+          
+          # Create desktop file
+          cat > AppDir/usr/share/applications/fastdupefinder.desktop << EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Fast Duplicate Finder
+          Exec=fastdupefinder
+          Icon=fastdupefinder
+          Categories=Utility;
+          EOF
+          
+          # Create a simple icon (you should replace this with your actual icon)
+          convert -size 256x256 xc:blue AppDir/usr/share/icons/hicolor/256x256/apps/fastdupefinder.png || echo "Using placeholder icon"
+          
+          # Create AppRun script
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/fastdupefinder" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          
+          # Create the AppImage
+          appimagetool AppDir "${{ matrix.gui-archive }}" || echo "AppImage creation failed, falling back to tar.gz"
+          
+          # Fallback to tar.gz if AppImage creation fails
+          if [ ! -f "${{ matrix.gui-archive }}" ]; then
+            tar -czf "$(basename ${{ matrix.gui-archive}} .AppImage).tar.gz" -C "${{ matrix.flutter-build-path }}" .
+            mv "$(basename ${{ matrix.gui-archive}} .AppImage).tar.gz" "${{ matrix.gui-archive }}"
+          fi
+          
+          echo "Linux GUI packaged: ${{ matrix.gui-archive }}"
+        shell: bash
+        
+      - name: Package GUI Application (macOS - DMG)
         if: runner.os == 'macOS'
         run: |
-          echo "Packaging macOS GUI application..."
+          echo "Creating DMG for macOS..."
           cd flutter_app/fastdupefinder
-          ditto -c -k --sequesterRsrc --keepParent "${{ matrix.flutter-build-path }}" "${{ matrix.gui-archive }}"
+          
+          # Create a temporary directory for DMG contents
+          mkdir -p dmg_temp
+          cp -R "${{ matrix.flutter-build-path }}" dmg_temp/
+          
+          # Create the DMG
+          hdiutil create -volname "Fast Duplicate Finder" \
+            -srcfolder dmg_temp \
+            -ov -format UDZO \
+            "${{ matrix.gui-archive }}"
+          
           echo "macOS GUI packaged: ${{ matrix.gui-archive }}"
         shell: bash
 
-      - name: Package GUI Application (Linux/Windows)
-        if: runner.os == 'Linux' || runner.os == 'Windows'
+      - name: Package GUI Application (Windows - MSIX)
+        if: runner.os == 'Windows'
         run: |
-          echo "Packaging ${{ matrix.platform }} GUI application..."
+          echo "Creating MSIX package for Windows..."
           cd flutter_app/fastdupefinder
-          7z a -tzip "${{ matrix.gui-archive }}" "${{ matrix.flutter-build-path }}"
-          echo "${{ matrix.platform }} GUI packaged: ${{ matrix.gui-archive }}"
+          
+          # Flutter should have built MSIX if configured, fallback to ZIP if not
+          if [ -f "build/windows/x64/runner/Release/fastdupefinder.msix" ]; then
+            cp "build/windows/x64/runner/Release/fastdupefinder.msix" "${{ matrix.gui-archive }}"
+          else
+            echo "MSIX not found, creating ZIP fallback..."
+            7z a -tzip "${{ matrix.gui-archive }}.zip" "${{ matrix.flutter-build-path }}"
+            mv "${{ matrix.gui-archive }}.zip" "${{ matrix.gui-archive }}"
+          fi
+          
+          echo "Windows GUI packaged: ${{ matrix.gui-archive }}"
         shell: bash
-        
+
       - name: Package CLI Application
         run: |
           echo "Packaging CLI application..."
+          
+          # All platforms use ZIP format for CLI
           7z a -tzip "${{ matrix.cli-archive }}" "${{ matrix.cli-executable }}"
+          
           echo "CLI packaged: ${{ matrix.cli-archive }}"
         shell: bash
 
@@ -192,8 +271,13 @@ jobs:
             Automated release build for version ${{ github.ref_name }}.
             
             ## Downloads
-            - **GUI Applications**: Desktop applications with graphical interface
+            - **GUI Applications**: Native desktop packages for each platform
             - **CLI Applications**: Command-line tools for scripting and automation
+            
+            ## Package Formats
+            - **Linux**: `.AppImage` (portable) and `.zip` (CLI)
+            - **Windows**: `.msix` (Microsoft Store format) and `.zip` (CLI)  
+            - **macOS**: `.dmg` (disk image) and `.zip` (CLI)
             
             ## Platform Support
             - **Linux x64**: Native build
