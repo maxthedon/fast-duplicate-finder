@@ -1,7 +1,7 @@
-# This workflow builds and creates a GitHub Release for Windows, macOS, and Linux
-# when a new tag is pushed that starts with 'v' (e.g., v1.0.0, v1.2.3).
+# Build and Release Fast Duplicate Finder
+# Creates GitHub releases for Windows, macOS, and Linux when a tag starting with 'v' is pushed
 
-name: Release
+name: Build and Release
 
 on:
   push:
@@ -10,165 +10,226 @@ on:
 
 jobs:
   build-and-release:
-    name: Build & Release for ${{ matrix.platform }}-${{ matrix.go-arch }}
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
+          # Linux x64 - Native build on Ubuntu
           - os: ubuntu-latest
             platform: linux
-            go-platform: linux
+            arch: x64
+            go-os: linux
             go-arch: amd64
-            cli-name: Fast-Duplicate-Finder
-            flutter-archive-name: Fast-Duplicate-Finder-linux-amd64.zip
-            cli-archive-name: Fast-Duplicate-Finder-command-line-linux-amd64.zip
+            cli-executable: fast-duplicate-finder
+            gui-archive: fast-duplicate-finder-linux-x64.zip
+            cli-archive: fast-duplicate-finder-cli-linux-x64.zip
             flutter-build-path: build/linux/x64/release/bundle
             flutter-target: linux-x64
             cc: gcc
-          - os: ubuntu-latest-arm64
-            platform: linux
-            go-platform: linux
-            go-arch: arm64
-            cli-name: Fast-Duplicate-Finder
-            flutter-archive-name: Fast-Duplicate-Finder-linux-arm64.zip
-            cli-archive-name: Fast-Duplicate-Finder-command-line-linux-arm64.zip
-            flutter-build-path: build/linux/arm64/release/bundle
-            flutter-target: linux-arm64
-            cc: gcc
+            
+          # Windows x64 - MinGW build on Windows
           - os: windows-latest
             platform: windows
-            go-platform: windows
+            arch: x64
+            go-os: windows
             go-arch: amd64
-            cli-name: Fast-Duplicate-Finder.exe
-            flutter-archive-name: Fast-Duplicate-Finder-windows-amd64.zip
-            cli-archive-name: Fast-Duplicate-Finder-command-line-windows-amd64.zip
+            cli-executable: fast-duplicate-finder.exe
+            gui-archive: fast-duplicate-finder-windows-x64.zip
+            cli-archive: fast-duplicate-finder-cli-windows-x64.zip
             flutter-build-path: build/windows/x64/runner/Release
             flutter-target: windows-x64
             cc: x86_64-w64-mingw32-gcc
+            
+          # Windows ARM64 - LLVM MinGW build on Windows
           - os: windows-latest
             platform: windows
-            go-platform: windows
+            arch: arm64
+            go-os: windows
             go-arch: arm64
-            cli-name: Fast-Duplicate-Finder.exe
-            flutter-archive-name: Fast-Duplicate-Finder-windows-arm64.zip
-            cli-archive-name: Fast-Duplicate-Finder-command-line-windows-arm64.zip
+            cli-executable: fast-duplicate-finder.exe
+            gui-archive: fast-duplicate-finder-windows-arm64.zip
+            cli-archive: fast-duplicate-finder-cli-windows-arm64.zip
             flutter-build-path: build/windows/arm64/runner/Release
             flutter-target: windows-arm64
             cc: aarch64-w64-mingw32-clang
+            use-llvm-mingw: true
+            
+          # macOS x64 - Native build on macOS 13
           - os: macos-13
             platform: macos
-            go-platform: darwin
+            arch: x64
+            go-os: darwin
             go-arch: amd64
-            cli-name: Fast-Duplicate-Finder
-            flutter-archive-name: Fast-Duplicate-Finder-macos-amd64.zip
-            cli-archive-name: Fast-Duplicate-Finder-command-line-macos-amd64.zip
+            cli-executable: fast-duplicate-finder
+            gui-archive: fast-duplicate-finder-macos-x64.zip
+            cli-archive: fast-duplicate-finder-cli-macos-x64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             flutter-target: macos-x64
             cc: clang
+            
+          # macOS ARM64 - Native build on macOS 14
           - os: macos-14
             platform: macos
-            go-platform: darwin
+            arch: arm64
+            go-os: darwin
             go-arch: arm64
-            cli-name: Fast-Duplicate-Finder
-            flutter-archive-name: Fast-Duplicate-Finder-macos-arm64.zip
-            cli-archive-name: Fast-Duplicate-Finder-command-line-macos-arm64.zip
+            cli-executable: fast-duplicate-finder
+            gui-archive: fast-duplicate-finder-macos-arm64.zip
+            cli-archive: fast-duplicate-finder-cli-macos-arm64.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
             flutter-target: macos-arm64
             cc: clang
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Go Environment
+      - name: Setup Go Environment
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
           cache-dependency-path: backend/go.sum
 
-      - name: Set up Flutter Environment
+      - name: Setup Flutter Environment
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Install Build Dependencies (Linux)
+      - name: Install Linux Build Dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev gcc-aarch64-linux-gnu gcc-mingw-w64
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            gcc \
+            build-essential
         shell: bash
 
-      - name: Install llvm-mingw for Windows ARM64 build
-        if: runner.os == 'Windows' && matrix.go-arch == 'arm64'
+      - name: Install Windows Build Dependencies
+        if: runner.os == 'Windows' && !matrix.use-llvm-mingw
         run: |
+          # MinGW is already available on windows-latest
+          echo "Using built-in MinGW for Windows x64"
+        shell: bash
+
+      - name: Install LLVM MinGW for Windows ARM64
+        if: runner.os == 'Windows' && matrix.use-llvm-mingw
+        run: |
+          Write-Host "Downloading LLVM MinGW for ARM64 cross-compilation..."
           $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250709/llvm-mingw-20250709-ucrt-x86_64.zip"
           $output = "llvm-mingw.zip"
+          
           Invoke-WebRequest -Uri $url -OutFile $output
           Expand-Archive -Path $output -DestinationPath "C:\"
+          
           $mingwPath = "C:\llvm-mingw-20250709-ucrt-x86_64\bin"
           Add-Content -Path $env:GITHUB_PATH -Value $mingwPath
+          
+          Write-Host "LLVM MinGW installed and added to PATH"
         shell: pwsh
       
-      - name: Build Command-Line Interface
+      - name: Build CLI Application
         env:
           CC: ${{ matrix.cc }}
+          GOOS: ${{ matrix.go-os }}
+          GOARCH: ${{ matrix.go-arch }}
         run: |
+          echo "Building CLI for ${{ matrix.platform }}-${{ matrix.arch }}..."
           cd backend
-          GOOS=${{ matrix.go-platform }} GOARCH=${{ matrix.go-arch }} go build -o ../${{ matrix.cli-name }} main.go
+          go build -o ../${{ matrix.cli-executable }} main.go
+          echo "CLI build completed: ${{ matrix.cli-executable }}"
         shell: bash
 
       - name: Build Shared Library for Flutter
         env:
           CC: ${{ matrix.cc }}
         run: |
+          echo "Building shared library for ${{ matrix.platform }}-${{ matrix.arch }}..."
           chmod +x ./scripts/build_and_deploy.sh
-          ./scripts/build_and_deploy.sh --platform ${{ matrix.go-platform }} --arch ${{ matrix.go-arch }}
+          ./scripts/build_and_deploy.sh --platform ${{ matrix.go-os }} --arch ${{ matrix.go-arch }}
+          echo "Shared library build completed"
         shell: bash
 
-      - name: Clean Native Libraries for Build
+      - name: Prepare Flutter Native Libraries
         run: |
+          echo "Cleaning native libraries for ${{ matrix.platform }}..."
           cd flutter_app/fastdupefinder/lib/native
+          
           if [ "${{ matrix.platform }}" == "macos" ]; then
+            # Keep only .dylib and .h files for macOS
             find . -type f ! -name "*.dylib" ! -name "*.h" -delete
           elif [ "${{ matrix.platform }}" == "linux" ]; then
+            # Keep only .so and .h files for Linux
             find . -type f ! -name "*.so" ! -name "*.h" -delete
           elif [ "${{ matrix.platform }}" == "windows" ]; then
+            # Keep only .dll and .h files for Windows
             find . -type f ! -name "*.dll" ! -name "*.h" -delete
           fi
+          
+          echo "Native libraries prepared for ${{ matrix.platform }}"
         shell: bash
 
-      - name: Build Flutter Desktop Application
+      - name: Build Flutter GUI Application
         run: |
+          echo "Building Flutter GUI for ${{ matrix.platform }}-${{ matrix.arch }}..."
           cd flutter_app/fastdupefinder
-          flutter build ${{ matrix.platform }} --release
+          flutter build ${{ matrix.platform }} --release --target-platform ${{ matrix.flutter-target }}
+          echo "Flutter GUI build completed"
         shell: bash
 
-      - name: Package macOS Application
+      - name: Package GUI Application (macOS)
         if: runner.os == 'macOS'
         run: |
+          echo "Packaging macOS GUI application..."
           cd flutter_app/fastdupefinder
-          ditto -c -k --sequesterRsrc --keepParent "${{ matrix.flutter-build-path }}" "${{ matrix.flutter-archive-name }}"
+          ditto -c -k --sequesterRsrc --keepParent "${{ matrix.flutter-build-path }}" "${{ matrix.gui-archive }}"
+          echo "macOS GUI packaged: ${{ matrix.gui-archive }}"
         shell: bash
 
-      - name: Package Linux/Windows Application
+      - name: Package GUI Application (Linux/Windows)
         if: runner.os == 'Linux' || runner.os == 'Windows'
         run: |
+          echo "Packaging ${{ matrix.platform }} GUI application..."
           cd flutter_app/fastdupefinder
-          7z a -tzip "${{ matrix.flutter-archive-name }}" "${{ matrix.flutter-build-path }}"
+          7z a -tzip "${{ matrix.gui-archive }}" "${{ matrix.flutter-build-path }}"
+          echo "${{ matrix.platform }} GUI packaged: ${{ matrix.gui-archive }}"
         shell: bash
         
-      - name: Package Command-Line Interface
+      - name: Package CLI Application
         run: |
-          7z a -tzip "${{ matrix.cli-archive-name }}" "${{ matrix.cli-name }}"
+          echo "Packaging CLI application..."
+          7z a -tzip "${{ matrix.cli-archive }}" "${{ matrix.cli-executable }}"
+          echo "CLI packaged: ${{ matrix.cli-archive }}"
         shell: bash
 
-      - name: Upload Assets to Release
+      - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ matrix.cli-archive-name }}
-            flutter_app/fastdupefinder/${{ matrix.flutter-archive-name }}
-          body: "Automated release for ${{ github.ref_name }}"
+            ${{ matrix.cli-archive }}
+            flutter_app/fastdupefinder/${{ matrix.gui-archive }}
+          body: |
+            # Fast Duplicate Finder ${{ github.ref_name }}
+            
+            Automated release build for version ${{ github.ref_name }}.
+            
+            ## Downloads
+            - **GUI Applications**: Desktop applications with graphical interface
+            - **CLI Applications**: Command-line tools for scripting and automation
+            
+            ## Platform Support
+            - **Linux x64**: Native build
+            - **Windows x64**: MinGW build  
+            - **Windows ARM64**: LLVM MinGW cross-compilation
+            - **macOS x64**: Native build on macOS 13
+            - **macOS ARM64**: Native build on macOS 14
+            
+            Built on: ${{ steps.date.outputs.date }}
           prerelease: false
           draft: false
         env:
