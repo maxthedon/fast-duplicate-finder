@@ -1,10 +1,3 @@
-# Build and Release Fast Duplicate Finder
-# Creates GitHub releases for Windows, macOS, and Linux when a tag starting with 'v' is pushed
-#
-# TODO: Add support for additional architectures in future releases:
-# - Linux ARM64: Cross-compilation from Ubuntu x64
-# - Windows ARM64: LLVM MinGW cross-compilation (requires Flutter master channel)
-
 name: Build and Release
 
 on:
@@ -13,63 +6,55 @@ on:
       - 'v*'
 
 jobs:
-  build-and-release:
+  build:
     name: Build ${{ matrix.platform }}-${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
-          # Linux x64 - Native build on Ubuntu 22.04 for good compatibility
+          # Linux x64
           - os: ubuntu-22.04
             platform: linux
             arch: x64
             go-os: linux
             go-arch: amd64
+            cli-name: fast-duplicate-finder-linux-x64-cli
+            gui-name: fast-duplicate-finder-linux-x64-gui
             cli-executable: fast-duplicate-finder
-            gui-archive: Fast-Duplicate-Finder-Linux-x64.AppImage
-            gui-zip-archive: Fast-Duplicate-Finder-Linux-x64-Portable.zip
-            cli-archive: Fast-Duplicate-Finder-Linux-x64-CLI.zip
             flutter-build-path: build/linux/x64/release/bundle
-            cc: gcc
             
-          # Windows x64 - MinGW build on Windows
+          # Windows x64
           - os: windows-latest
             platform: windows
             arch: x64
             go-os: windows
             go-arch: amd64
+            cli-name: fast-duplicate-finder-windows-x64-cli
+            gui-name: fast-duplicate-finder-windows-x64-gui
             cli-executable: fast-duplicate-finder.exe
-            gui-archive: Fast-Duplicate-Finder-Windows-x64.zip
-            gui-zip-archive: Fast-Duplicate-Finder-Windows-x64-Portable.zip
-            cli-archive: Fast-Duplicate-Finder-Windows-x64-CLI.zip
             flutter-build-path: build/windows/x64/runner/Release
-            cc: x86_64-w64-mingw32-gcc
             
-          # macOS x64 - Native build on macOS 13
+          # macOS x64
           - os: macos-13
             platform: macos
             arch: x64
             go-os: darwin
             go-arch: amd64
+            cli-name: fast-duplicate-finder-macos-x64-cli
+            gui-name: fast-duplicate-finder-macos-x64-gui
             cli-executable: fast-duplicate-finder
-            gui-archive: Fast-Duplicate-Finder-macOS-Intel.dmg
-            gui-zip-archive: Fast-Duplicate-Finder-macOS-Intel-Portable.zip
-            cli-archive: Fast-Duplicate-Finder-macOS-Intel-CLI.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
-            cc: clang
             
-          # macOS ARM64 - Native build on macOS 14
+          # macOS ARM64
           - os: macos-14
             platform: macos
             arch: arm64
             go-os: darwin
             go-arch: arm64
+            cli-name: fast-duplicate-finder-macos-arm64-cli
+            gui-name: fast-duplicate-finder-macos-arm64-gui
             cli-executable: fast-duplicate-finder
-            gui-archive: Fast-Duplicate-Finder-macOS-AppleSilicon.dmg
-            gui-zip-archive: Fast-Duplicate-Finder-macOS-AppleSilicon-Portable.zip
-            cli-archive: Fast-Duplicate-Finder-macOS-AppleSilicon-CLI.zip
             flutter-build-path: build/macos/Build/Products/Release/fastdupefinder.app
-            cc: clang
 
     steps:
       - name: Checkout Repository
@@ -97,34 +82,17 @@ jobs:
             pkg-config \
             libgtk-3-dev \
             gcc \
-            build-essential \
-            fuse \
-            libfuse2 \
-            patchelf \
-            file
-        shell: bash
-
-      - name: Install AppImageTool for Linux
-        if: runner.os == 'Linux'
-        run: |
-          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
-          sudo mv appimagetool-x86_64.AppImage /usr/local/bin/appimagetool
+            build-essential
         shell: bash
 
       - name: Install Windows Build Dependencies
         if: runner.os == 'Windows'
         run: |
-          # MinGW is already available on windows-latest
-          echo "Using built-in MinGW for Windows x64"
-          
-          # Install 7zip for creating self-extracting executable
           choco install 7zip -y
         shell: bash
       
       - name: Build CLI Application
         env:
-          CC: ${{ matrix.cc }}
           GOOS: ${{ matrix.go-os }}
           GOARCH: ${{ matrix.go-arch }}
         run: |
@@ -135,8 +103,6 @@ jobs:
         shell: bash
 
       - name: Build Shared Library for Flutter
-        env:
-          CC: ${{ matrix.cc }}
         run: |
           echo "Building shared library for ${{ matrix.platform }}-${{ matrix.arch }}..."
           chmod +x ./scripts/build_and_deploy.sh
@@ -146,7 +112,7 @@ jobs:
 
       - name: Prepare Flutter Native Libraries
         run: |
-          echo "Cleaning native libraries for ${{ matrix.platform }}..."
+          echo "Preparing native libraries for ${{ matrix.platform }}..."
           cd flutter_app/fastdupefinder/lib/native
           
           if [ "${{ matrix.platform }}" == "macos" ]; then
@@ -167,352 +133,160 @@ jobs:
         run: |
           echo "Building Flutter GUI for ${{ matrix.platform }}-${{ matrix.arch }}..."
           cd flutter_app/fastdupefinder
-          
-          # All platforms use standard build command (no --target-platform in stable channel)
           flutter build ${{ matrix.platform }} --release
-          
           echo "Flutter GUI build completed"
-        shell: bash
-
-      - name: Package GUI Application (Linux - AppImage)
-        if: runner.os == 'Linux'
-        run: |
-          echo "Creating AppImage for Linux..."
-          cd flutter_app/fastdupefinder
-          
-          # Create AppDir structure
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-          mkdir -p AppDir/usr/lib
-          
-          # Copy the Flutter app bundle - preserve the structure for library loading
-          cp -r "${{ matrix.flutter-build-path }}"/* AppDir/usr/bin/
-          
-          # The main executable should be directly accessible as 'fastdupefinder'
-          # Flutter Linux builds put the executable in the bundle root
-          if [ ! -f "AppDir/usr/bin/fastdupefinder" ]; then
-            echo "Error: fastdupefinder executable not found in bundle"
-            ls -la AppDir/usr/bin/
-            exit 1
-          fi
-          
-          # Make sure the executable is actually executable
-          chmod +x AppDir/usr/bin/fastdupefinder
-          
-          # Check what libraries the executable depends on
-          echo "Checking dependencies of fastdupefinder:"
-          ldd AppDir/usr/bin/fastdupefinder | head -20
-          
-          # Copy essential system libraries that might not be available on target systems
-          echo "Bundling essential libraries..."
-          mkdir -p AppDir/usr/lib/x86_64-linux-gnu
-          
-          # Function to copy library and its dependencies
-          copy_lib() {
-            local lib_path="$1"
-            local lib_name=$(basename "$lib_path")
-            
-            if [ -f "$lib_path" ] && [ ! -f "AppDir/usr/lib/x86_64-linux-gnu/$lib_name" ]; then
-              echo "Copying library: $lib_name"
-              cp "$lib_path" "AppDir/usr/lib/x86_64-linux-gnu/"
-              
-              # Make sure it's executable
-              chmod +x "AppDir/usr/lib/x86_64-linux-gnu/$lib_name"
-            fi
-          }
-          
-          # Copy critical libraries that Flutter apps often need
-          # These libraries are commonly missing or have version mismatches
-          for lib in \
-            "/lib/x86_64-linux-gnu/libglib-2.0.so.0" \
-            "/lib/x86_64-linux-gnu/libgobject-2.0.so.0" \
-            "/lib/x86_64-linux-gnu/libgio-2.0.so.0" \
-            "/lib/x86_64-linux-gnu/libgmodule-2.0.so.0" \
-            "/lib/x86_64-linux-gnu/libpcre2-8.so.0" \
-            "/lib/x86_64-linux-gnu/libffi.so.8" \
-            "/lib/x86_64-linux-gnu/libmount.so.1" \
-            "/lib/x86_64-linux-gnu/libselinux.so.1" \
-            "/lib/x86_64-linux-gnu/libblkid.so.1" \
-            "/usr/lib/x86_64-linux-gnu/libgtk-3.so.0" \
-            "/usr/lib/x86_64-linux-gnu/libgdk-3.so.0" \
-            "/usr/lib/x86_64-linux-gnu/libcairo-gobject.so.2" \
-            "/usr/lib/x86_64-linux-gnu/libcairo.so.2" \
-            "/usr/lib/x86_64-linux-gnu/libgdk_pixbuf-2.0.so.0" \
-            "/usr/lib/x86_64-linux-gnu/libpango-1.0.so.0" \
-            "/usr/lib/x86_64-linux-gnu/libharfbuzz.so.0" \
-            "/usr/lib/x86_64-linux-gnu/libatk-1.0.so.0" \
-            "/usr/lib/x86_64-linux-gnu/libepoxy.so.0"; do
-            
-            if [ -f "$lib" ]; then
-              copy_lib "$lib"
-            else
-              echo "Library not found: $lib"
-            fi
-          done
-          
-          # Also copy any libraries that the executable directly depends on
-          echo "Copying direct dependencies..."
-          ldd AppDir/usr/bin/fastdupefinder | grep -E "=> (/lib|/usr/lib)" | awk '{print $3}' | while read lib; do
-            if [ -f "$lib" ] && [[ "$lib" == *"libglib"* ]] || [[ "$lib" == *"libgobject"* ]] || [[ "$lib" == *"libgio"* ]] || [[ "$lib" == *"libgtk"* ]] || [[ "$lib" == *"libgdk"* ]]; then
-              copy_lib "$lib"
-            fi
-          done
-          
-          # Create desktop file in the root of AppDir (required by appimagetool)
-          cat > AppDir/fastdupefinder.desktop << EOF
-          [Desktop Entry]
-          Type=Application
-          Name=Fast Duplicate Finder
-          Exec=fastdupefinder
-          Icon=fastdupefinder
-          Categories=Utility;FileTools;
-          Comment=Find and remove duplicate files
-          EOF
-          
-          # Also create it in the standard location
-          cat > AppDir/usr/share/applications/fastdupefinder.desktop << EOF
-          [Desktop Entry]
-          Type=Application
-          Name=Fast Duplicate Finder
-          Exec=fastdupefinder
-          Icon=fastdupefinder
-          Categories=Utility;FileTools;
-          Comment=Find and remove duplicate files
-          EOF
-          
-          # Create a simple icon (using ImageMagick convert or fallback)
-          if command -v convert >/dev/null 2>&1; then
-            convert -size 256x256 xc:'#4A90E2' -pointsize 72 -fill white -gravity center -annotate +0+0 'FDF' AppDir/usr/share/icons/hicolor/256x256/apps/fastdupefinder.png
-            # Copy icon to AppDir root as well (required by appimagetool)
-            cp AppDir/usr/share/icons/hicolor/256x256/apps/fastdupefinder.png AppDir/fastdupefinder.png
-          else
-            # Create a simple PNG without ImageMagick in both locations
-            echo "No ImageMagick, creating minimal icon file"
-            touch AppDir/usr/share/icons/hicolor/256x256/apps/fastdupefinder.png
-            touch AppDir/fastdupefinder.png
-          fi
-          
-          # Create AppRun script that properly sets up the environment
-          cat > AppDir/AppRun << 'EOF'
-          #!/bin/bash
-          HERE="$(dirname "$(readlink -f "${0}")")"
-          
-          # Set up library path so the app can find its dependencies
-          # Include both the Flutter lib directory and our bundled system libraries
-          export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
-          
-          # Set up data directory for flutter assets
-          export FLUTTER_ASSETS_DIR="${HERE}/usr/bin/data"
-          
-          # Set up XDG directories to avoid conflicts
-          export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"
-          
-          # Run the application with all arguments passed through
-          exec "${HERE}/usr/bin/fastdupefinder" "$@"
-          EOF
-          chmod +x AppDir/AppRun
-          
-          # Verify the structure and libraries before creating AppImage
-          echo "AppDir structure:"
-          find AppDir -type f -executable | head -10
-          echo "Bundled libraries:"
-          ls -la AppDir/usr/lib/x86_64-linux-gnu/ | head -10
-          echo "Checking if fastdupefinder is executable:"
-          file AppDir/usr/bin/fastdupefinder
-          echo "Checking desktop file:"
-          ls -la AppDir/*.desktop 2>/dev/null || echo "No desktop file in AppDir root"
-          echo "Desktop file content:"
-          cat AppDir/fastdupefinder.desktop 2>/dev/null || echo "Cannot read desktop file"
-          
-          # Create the AppImage with verbose output
-          appimagetool -v AppDir "${{ matrix.gui-archive }}" || echo "AppImage creation failed, falling back to tar.gz"
-          
-          # Fallback to tar.gz if AppImage creation fails
-          if [ ! -f "${{ matrix.gui-archive }}" ]; then
-            echo "AppImage creation failed, creating tar.gz fallback"
-            tar -czf "$(basename ${{ matrix.gui-archive}} .AppImage).tar.gz" -C "${{ matrix.flutter-build-path }}" .
-            mv "$(basename ${{ matrix.gui-archive}} .AppImage).tar.gz" "${{ matrix.gui-archive }}"
-          fi
-          
-          # Create GUI ZIP package
-          echo "Creating GUI ZIP package for Linux..."
-          cd "${{ matrix.flutter-build-path }}"
-          7z a -tzip "../../${{ matrix.gui-zip-archive }}" *
-          cd ../../../..
-          
-          echo "Linux GUI packaged: ${{ matrix.gui-archive }}"
-          echo "Linux GUI ZIP packaged: ${{ matrix.gui-zip-archive }}"
-        shell: bash
-        
-      - name: Package GUI Application (macOS - DMG)
-        if: runner.os == 'macOS'
-        run: |
-          echo "Creating DMG for macOS..."
-          cd flutter_app/fastdupefinder
-          
-          # Create a temporary directory for DMG contents
-          mkdir -p dmg_temp
-          cp -R "${{ matrix.flutter-build-path }}" dmg_temp/
-          
-          # Create the DMG
-          hdiutil create -volname "Fast Duplicate Finder" \
-            -srcfolder dmg_temp \
-            -ov -format UDZO \
-            "${{ matrix.gui-archive }}"
-          
-          # Create GUI ZIP package for macOS
-          echo "Creating GUI ZIP package for macOS..."
-          7z a -tzip "${{ matrix.gui-zip-archive }}" "${{ matrix.flutter-build-path }}"/*
-          
-          echo "macOS GUI packaged: ${{ matrix.gui-archive }}"
-          echo "macOS GUI ZIP packaged: ${{ matrix.gui-zip-archive }}"
-        shell: bash
-
-      - name: Package GUI Application (Windows - Portable ZIP)
-        if: runner.os == 'Windows'
-        run: |
-          echo "Creating portable ZIP for Windows..."
-          cd flutter_app/fastdupefinder
-          
-          # Verify the Flutter build output exists
-          if [ ! -f "${{ matrix.flutter-build-path }}/fastdupefinder.exe" ]; then
-            echo "Error: fastdupefinder.exe not found in build output"
-            ls -la "${{ matrix.flutter-build-path }}/"
-            exit 1
-          fi
-          
-          echo "Flutter build contents:"
-          ls -la "${{ matrix.flutter-build-path }}/" | head -10
-          
-          # Create a portable Windows package
-          echo "Creating portable package..."
-          
-          # Create a temporary directory for packaging
-          mkdir -p windows_portable
-          
-          # Copy all Flutter build files to the portable directory
-          cp -r "${{ matrix.flutter-build-path }}"/* windows_portable/
-          
-          # Verify the main executable is there
-          if [ ! -f "windows_portable/fastdupefinder.exe" ]; then
-            echo "Error: Could not copy fastdupefinder.exe to portable directory"
-            ls -la windows_portable/
-            exit 1
-          fi
-          
-          # Create a README for the portable version
-          cat > windows_portable/README.txt << 'EOF'
-          Fast Duplicate Finder - Windows Portable Edition
-          
-          This is a portable Windows application that requires no installation.
-          
-          To use:
-          1. Extract all files from the ZIP to a folder
-          2. Double-click on "fastdupefinder.exe" to run the application
-          
-          Features:
-          - Fully portable - run from any location
-          - No installation required
-          - No registry changes
-          - Can be run from USB drives
-          
-          All application files and dependencies are included in this package.
-          
-          For support, visit: https://github.com/maxthedon/fast-dupe-finder
-          EOF
-          
-          # Create a simple batch file launcher for convenience
-          cat > windows_portable/Run-Fast-Duplicate-Finder.bat << 'EOF'
-          @echo off
-          cd /d "%~dp0"
-          echo Starting Fast Duplicate Finder...
-          echo.
-          start "" "fastdupefinder.exe"
-          EOF
-          
-          # Find 7-Zip installation
-          SEVENZIP_PATH=""
-          if [ -f "/c/Program Files/7-Zip/7z.exe" ]; then
-            SEVENZIP_PATH="/c/Program Files/7-Zip"
-          elif [ -f "/c/ProgramData/chocolatey/bin/7z.exe" ]; then
-            SEVENZIP_PATH="/c/ProgramData/chocolatey/bin"
-          elif [ -f "/c/ProgramData/chocolatey/lib/7zip/tools/7z.exe" ]; then
-            SEVENZIP_PATH="/c/ProgramData/chocolatey/lib/7zip/tools"
-          elif command -v 7z >/dev/null 2>&1; then
-            # Use system 7z if available
-            echo "Using system 7z command"
-          else
-            echo "7-Zip not found, using PowerShell compression"
-          fi
-          
-          # Create the main GUI ZIP package
-          echo "Creating main GUI ZIP package for Windows..."
-          if [ -n "$SEVENZIP_PATH" ]; then
-            echo "Found 7-Zip at: $SEVENZIP_PATH"
-            "$SEVENZIP_PATH/7z.exe" a -tzip "${{ matrix.gui-archive }}" windows_portable/*
-          elif command -v 7z >/dev/null 2>&1; then
-            7z a -tzip "${{ matrix.gui-archive }}" windows_portable/*
-          else
-            # Fallback to PowerShell Compress-Archive
-            powershell -Command "Compress-Archive -Path 'windows_portable\*' -DestinationPath '${{ matrix.gui-archive }}' -Force"
-          fi
-          
-          # Create the portable ZIP package (same content, different name for clarity)
-          echo "Creating portable ZIP package for Windows..."
-          if [ -n "$SEVENZIP_PATH" ]; then
-            "$SEVENZIP_PATH/7z.exe" a -tzip "${{ matrix.gui-zip-archive }}" windows_portable/*
-          elif command -v 7z >/dev/null 2>&1; then
-            7z a -tzip "${{ matrix.gui-zip-archive }}" windows_portable/*
-          else
-            powershell -Command "Compress-Archive -Path 'windows_portable\*' -DestinationPath '${{ matrix.gui-zip-archive }}' -Force"
-          fi
-          
-          # Verify packages were created
-          if [ -f "${{ matrix.gui-archive }}" ]; then
-            echo "Windows GUI packaged successfully: ${{ matrix.gui-archive }}"
-            ls -lh "${{ matrix.gui-archive }}"
-            
-            # Show what's inside the package
-            echo "Package contents:"
-            if [ -n "$SEVENZIP_PATH" ]; then
-              "$SEVENZIP_PATH/7z.exe" l "${{ matrix.gui-archive }}" | head -20
-            elif command -v 7z >/dev/null 2>&1; then
-              7z l "${{ matrix.gui-archive }}" | head -20
-            else
-              echo "Contents: Flutter app files + README.txt + launcher batch file"
-            fi
-          else
-            echo "Error: Failed to create Windows GUI package"
-            exit 1
-          fi
-          
-          if [ -f "${{ matrix.gui-zip-archive }}" ]; then
-            echo "Windows GUI portable ZIP packaged: ${{ matrix.gui-zip-archive }}"
-            ls -lh "${{ matrix.gui-zip-archive }}"
-          else
-            echo "Error: Failed to create Windows GUI portable ZIP package"
-            exit 1
-          fi
         shell: bash
 
       - name: Package CLI Application
         run: |
           echo "Packaging CLI application..."
+          mkdir -p cli-package
+          cp ${{ matrix.cli-executable }} cli-package/
           
-          # All platforms use ZIP format for CLI
-          7z a -tzip "${{ matrix.cli-archive }}" "${{ matrix.cli-executable }}"
+          # Add README for CLI
+          cat > cli-package/README.txt << 'EOF'
+          Fast Duplicate Finder - Command Line Interface
           
-          echo "CLI packaged: ${{ matrix.cli-archive }}"
+          This is the command-line version of Fast Duplicate Finder.
+          
+          Usage:
+            fast-duplicate-finder [options] <directory>
+          
+          For help and options, run:
+            fast-duplicate-finder --help
+          
+          For support, visit: https://github.com/maxthedon/fast-dupe-finder
+          EOF
+          
+          cd cli-package
+          7z a -tzip ../${{ matrix.cli-name }}.zip *
+          cd ..
+          
+          echo "CLI packaged: ${{ matrix.cli-name }}.zip"
+        shell: bash
+
+      - name: Package GUI Application (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "Packaging GUI application for Linux..."
+          cd flutter_app/fastdupefinder
+          
+          mkdir -p gui-package
+          cp -r ${{ matrix.flutter-build-path }}/* gui-package/
+          
+          # Ensure the shared library is included
+          if [ -f "lib/native/libfastdupe.so" ]; then
+            cp lib/native/libfastdupe.so gui-package/lib/
+          fi
+          
+          # Add README for GUI
+          cat > gui-package/README.txt << 'EOF'
+          Fast Duplicate Finder - Linux GUI
+          
+          This is the graphical user interface version of Fast Duplicate Finder for Linux.
+          
+          To run:
+            ./fastdupefinder
+          
+          Make sure the executable has the correct permissions:
+            chmod +x fastdupefinder
+          
+          For support, visit: https://github.com/maxthedon/fast-dupe-finder
+          EOF
+          
+          cd gui-package
+          7z a -tzip ../${{ matrix.gui-name }}.zip *
+          cd ..
+          
+          echo "Linux GUI packaged: ${{ matrix.gui-name }}.zip"
+        shell: bash
+
+      - name: Package GUI Application (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          echo "Packaging GUI application for Windows..."
+          cd flutter_app/fastdupefinder
+          
+          mkdir -p gui-package
+          cp -r ${{ matrix.flutter-build-path }}/* gui-package/
+          
+          # Ensure the shared library is included
+          if [ -f "lib/native/libfastdupe.dll" ]; then
+            cp lib/native/libfastdupe.dll gui-package/
+          fi
+          
+          # Add README for GUI
+          cat > gui-package/README.txt << 'EOF'
+          Fast Duplicate Finder - Windows GUI
+          
+          This is the graphical user interface version of Fast Duplicate Finder for Windows.
+          
+          To run:
+            Double-click on fastdupefinder.exe
+          
+          This is a portable application that requires no installation.
+          
+          For support, visit: https://github.com/maxthedon/fast-dupe-finder
+          EOF
+          
+          # Create launcher batch file
+          cat > gui-package/Run-Fast-Duplicate-Finder.bat << 'EOF'
+          @echo off
+          cd /d "%~dp0"
+          echo Starting Fast Duplicate Finder...
+          start "" "fastdupefinder.exe"
+          EOF
+          
+          cd gui-package
+          7z a -tzip ../${{ matrix.gui-name }}.zip *
+          cd ..
+          
+          echo "Windows GUI packaged: ${{ matrix.gui-name }}.zip"
+        shell: bash
+
+      - name: Package GUI Application (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "Packaging GUI application for macOS..."
+          cd flutter_app/fastdupefinder
+          
+          mkdir -p gui-package
+          cp -r ${{ matrix.flutter-build-path }} gui-package/
+          
+          # Ensure the shared library is included in the app bundle
+          if [ -f "lib/native/libfastdupe.dylib" ]; then
+            mkdir -p gui-package/fastdupefinder.app/Contents/Frameworks
+            cp lib/native/libfastdupe.dylib gui-package/fastdupefinder.app/Contents/Frameworks/
+          fi
+          
+          # Add README for GUI
+          cat > gui-package/README.txt << 'EOF'
+          Fast Duplicate Finder - macOS GUI
+          
+          This is the graphical user interface version of Fast Duplicate Finder for macOS.
+          
+          To run:
+            Double-click on fastdupefinder.app
+          
+          You may need to allow the app in System Preferences > Security & Privacy
+          if you see a security warning.
+          
+          For support, visit: https://github.com/maxthedon/fast-dupe-finder
+          EOF
+          
+          cd gui-package
+          7z a -tzip ../${{ matrix.gui-name }}.zip *
+          cd ..
+          
+          echo "macOS GUI packaged: ${{ matrix.gui-name }}.zip"
         shell: bash
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ matrix.cli-archive }}
-            flutter_app/fastdupefinder/${{ matrix.gui-archive }}
-            flutter_app/fastdupefinder/${{ matrix.gui-zip-archive }}
+            ${{ matrix.cli-name }}.zip
+            flutter_app/fastdupefinder/${{ matrix.gui-name }}.zip
           body: |
             # Fast Duplicate Finder ${{ github.ref_name }}
             
@@ -520,49 +294,44 @@ jobs:
             
             ## 📥 Downloads
             
-            ### 🐧 Linux
-            - **`Fast-Duplicate-Finder-Linux-x64.AppImage`** - Single-file portable application (recommended)
-            - **`Fast-Duplicate-Finder-Linux-x64-Portable.zip`** - Extract and run anywhere
-            - **`Fast-Duplicate-Finder-Linux-x64-CLI.zip`** - Command-line version for scripts
+            Choose the appropriate version for your platform:
             
-            ### 🪟 Windows  
-            - **`Fast-Duplicate-Finder-Windows-x64.zip`** - Main Windows package (extract and run)
-            - **`Fast-Duplicate-Finder-Windows-x64-Portable.zip`** - Portable version (same content)
-            - **`Fast-Duplicate-Finder-Windows-x64-CLI.zip`** - Command-line version for scripts
+            ### 🐧 Linux x64
+            - **GUI**: `fast-duplicate-finder-linux-x64-gui.zip` - Graphical interface
+            - **CLI**: `fast-duplicate-finder-linux-x64-cli.zip` - Command line interface
             
-            ### 🍎 macOS
-            - **`Fast-Duplicate-Finder-macOS-Intel.dmg`** - For Intel Macs (disk image installer)
-            - **`Fast-Duplicate-Finder-macOS-AppleSilicon.dmg`** - For M1/M2/M3 Macs (disk image installer)
-            - **`Fast-Duplicate-Finder-macOS-Intel-Portable.zip`** - Intel Macs portable version
-            - **`Fast-Duplicate-Finder-macOS-AppleSilicon-Portable.zip`** - Apple Silicon portable version
-            - **`Fast-Duplicate-Finder-macOS-Intel-CLI.zip`** - Intel Macs command-line version
-            - **`Fast-Duplicate-Finder-macOS-AppleSilicon-CLI.zip`** - Apple Silicon command-line version
+            ### 🪟 Windows x64
+            - **GUI**: `fast-duplicate-finder-windows-x64-gui.zip` - Graphical interface
+            - **CLI**: `fast-duplicate-finder-windows-x64-cli.zip` - Command line interface
+            
+            ### 🍎 macOS x64 (Intel)
+            - **GUI**: `fast-duplicate-finder-macos-x64-gui.zip` - Graphical interface
+            - **CLI**: `fast-duplicate-finder-macos-x64-cli.zip` - Command line interface
+            
+            ### 🍎 macOS ARM64 (Apple Silicon)
+            - **GUI**: `fast-duplicate-finder-macos-arm64-gui.zip` - Graphical interface  
+            - **CLI**: `fast-duplicate-finder-macos-arm64-cli.zip` - Command line interface
             
             ## 🚀 Quick Start
             
-            ### Linux
-            1. Download `Fast-Duplicate-Finder-Linux-x64.AppImage`
-            2. Make it executable: `chmod +x Fast-Duplicate-Finder-Linux-x64.AppImage`
-            3. Run: `./Fast-Duplicate-Finder-Linux-x64.AppImage`
-            
-            ### Windows
-            1. Download `Fast-Duplicate-Finder-Windows-x64.zip`
+            ### GUI Versions
+            1. Download the appropriate GUI zip file for your platform
             2. Extract all files to a folder
-            3. Run `fastdupefinder.exe` or double-click `Run-Fast-Duplicate-Finder.bat`
+            3. Run the main executable (see README.txt in each package)
             
-            ### macOS
-            1. Download the appropriate `.dmg` file for your Mac
-            2. Open the DMG and drag the app to Applications
-            3. Run from Applications or Launchpad
+            ### CLI Versions
+            1. Download the appropriate CLI zip file for your platform
+            2. Extract the executable
+            3. Run from command line with `--help` to see options
             
-            ## 🔧 Technical Details
+            ## 📋 What's Included
             
-            - **Linux**: Built on Ubuntu 22.04 for good compatibility (GLIBC 2.35+)
-            - **Windows**: Portable applications require no installation
-            - **macOS**: Native builds optimized for Intel and Apple Silicon processors
+            - **GUI packages**: Full Flutter application with native shared library
+            - **CLI packages**: Lightweight command-line tool
+            - **All packages**: Include README.txt with platform-specific instructions
             
-            Built on: ${{ steps.date.outputs.date }}
+            All packages are portable and require no installation.
           prerelease: false
           draft: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
