@@ -12,20 +12,77 @@ Fast Duplicate Finder is a powerful, easy-to-use application that helps you iden
 
 **Get the latest version for your platform:**
 
-### 🖥️ Desktop Applications (User-Friendly GUI)
-- **Windows 10/11**: [Download fast-duplicate-finder-windows-x64.msix](https://github.com/maxthedon/fast-dupe-finder/releases/latest) 
-- **macOS** (Intel & Apple Silicon): [Download fast-duplicate-finder-macos-x64.dmg](https://github.com/maxthedon/fast-dupe-finder/releases/latest) or [fast-duplicate-finder-macos-arm64.dmg](https://github.com/maxthedon/fast-dupe-finder/releases/latest)
-- **Linux** (All Distributions): [Download fast-duplicate-finder-linux-x64.AppImage](https://github.com/maxthedon/fast-dupe-finder/releases/latest)
+### 🖥️ **Recommended for Most Users: Desktop Applications (GUI)**
 
-### ⚡ Command Line Tools (For Power Users)
-- **Windows CLI**: [Download fast-duplicate-finder-cli-windows-x64.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest)
-- **macOS CLI**: [Download fast-duplicate-finder-cli-macos-x64.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) or [fast-duplicate-finder-cli-macos-arm64.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest)
-- **Linux CLI**: [Download fast-duplicate-finder-cli-linux-x64.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest)
+**GUI** means "Graphical User Interface" - these are **desktop apps with a visual interface**. Easy and quick to use with familiar buttons and menus.
 
-> 💡 **Installation Tips**:
-> - **Linux**: Make the AppImage executable (`chmod +x fast-duplicate-finder-linux-x64.AppImage`) then double-click to run
-> - **macOS**: You may need to right-click and select "Open" the first time due to security settings
-> - **Windows**: The MSIX package can be installed directly or through the Microsoft Store
+- **🐧 Linux x64**: [Download fast-duplicate-finder-linux-x64-gui.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) → [Quick Start Guide](#step-2-run-the-application)
+- **🪟 Windows x64**: [Download fast-duplicate-finder-windows-x64-gui.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) → [Quick Start Guide](#step-2-run-the-application)
+- **🍎 macOS x64 (Intel)**: [Download fast-duplicate-finder-macos-x64-gui.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) → [Quick Start Guide](#step-2-run-the-application)
+- **🍎 macOS ARM64 (Apple Silicon)**: [Download fast-duplicate-finder-macos-arm64-gui.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) → [Quick Start Guide](#step-2-run-the-application)
+
+### ⚡ **For Advanced Users: Command Line Tools (CLI)**
+
+**CLI** means "Command Line Interface" - these are **text-based tools**. You type commands in a terminal window.
+
+- **🐧 Linux CLI**: [Download fast-duplicate-finder-linux-x64-cli.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) → [CLI Usage Guide](#-command-line-usage)
+- **🪟 Windows CLI**: [Download fast-duplicate-finder-windows-x64-cli.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) → [CLI Usage Guide](#-command-line-usage)
+- **🍎 macOS CLI x64**: [Download fast-duplicate-finder-macos-x64-cli.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) → [CLI Usage Guide](#-command-line-usage)
+- **🍎 macOS CLI ARM64**: [Download fast-duplicate-finder-macos-arm64-cli.zip](https://github.com/maxthedon/fast-dupe-finder/releases/latest) → [CLI Usage Guide](#-command-line-usage)
+
+> 🤔 **Not sure which one to choose?** 
+> - **Most people prefer the GUI version** - visual interface with buttons and menus
+> - **Choose CLI if** you prefer command-line tools or need automation
+
+## 🚀 Quick Start Guide
+
+> 💡 **New to this?** The **GUI (desktop app) version** is quick and easy to use!
+
+### Step 1: Extract the ZIP File
+1. **Download** the appropriate ZIP file for your platform from the [Download section](#-download) above
+2. **Extract**: Right-click the downloaded ZIP file and select "Extract All" (Windows) or double-click (macOS/Linux)
+3. **Choose location**: Extract to somewhere easy to find (e.g., Desktop, Applications folder, etc.)
+
+### Step 2: Run the Application
+
+#### 🖥️ **GUI (Desktop) Versions - Visual Interface:**
+Works like any desktop program with buttons and menus.
+
+- **🐧 Linux**: Open the extracted folder → Double-click `fastdupefinder` → The app opens
+- **🪟 Windows**: Open the extracted folder → Double-click `fastdupefinder.exe` (or use `Run-Fast-Duplicate-Finder.bat`) → The app opens  
+- **🍎 macOS**: Open the extracted folder → Double-click `fastdupefinder.app` → The app opens
+
+#### ⚡ **CLI (Command Line) Versions - Terminal Interface:**
+For users who prefer command-line tools.
+
+- **🐧 Linux**: Open terminal in the extracted folder → Type `./fast-duplicate-finder` → Results show in terminal
+- **🪟 Windows**: Open Command Prompt in the extracted folder → Type `fast-duplicate-finder.exe` → Results show in command window
+- **🍎 macOS**: Open Terminal in the extracted folder → Type `./fast-duplicate-finder` → Results show in terminal
+
+## � Quick Start Guide
+
+### Step 1: Extract the ZIP File
+1. Download the appropriate ZIP file for your platform from the links above
+2. Right-click the downloaded ZIP file and select "Extract All" (Windows) or double-click (macOS/Linux)
+3. Choose a location to extract the files (e.g., Desktop, Applications folder, etc.)
+
+### Step 2: Run the Application
+
+#### 🖥️ GUI (Desktop) Versions:
+- **🐧 Linux**: Open the extracted folder and double-click `fastdupefinder` (or run `./fastdupefinder` in terminal)
+- **🪟 Windows**: Open the extracted folder and double-click `fastdupefinder.exe` (or use the included `Run-Fast-Duplicate-Finder.bat`)
+- **🍎 macOS**: Open the extracted folder and double-click `fastdupefinder.app`
+
+#### ⚡ CLI (Command Line) Versions:
+- **🐧 Linux**: Open terminal in the extracted folder and run `./fast-duplicate-finder`
+- **🪟 Windows**: Open Command Prompt in the extracted folder and run `fast-duplicate-finder.exe`
+- **🍎 macOS**: Open Terminal in the extracted folder and run `./fast-duplicate-finder`
+
+### 💡 **Important Notes**:
+- **Linux**: If you get a "Permission denied" error, make the file executable: `chmod +x fastdupefinder` or `chmod +x fast-duplicate-finder`
+- **macOS**: You may see a security warning the first time. Right-click the app and select "Open", then click "Open" in the dialog
+- **Windows**: All files are portable and require no installation. Windows may show a security warning - click "More info" then "Run anyway"
+- **All platforms**: Each package includes a README.txt file with platform-specific instructions
 
 ## 🚀 What Does This Program Do?
 
@@ -95,6 +152,9 @@ Perfect for power users, automation, and scripting. The command line version run
 
 # Scan external drive mounted at /media/backup
 ./fast-duplicate-finder /media/backup
+
+# Windows users (after extracting CLI zip)
+fast-duplicate-finder.exe --progress C:\Users\YourName\Documents
 ```
 
 ### Understanding the Output
@@ -216,18 +276,18 @@ This builds optimized versions for all supported platforms:
 The release process builds the following packages:
 
 #### Linux x64
-- **GUI**: `.AppImage` (portable, runs on all distributions)
-- **CLI**: `.zip` archive with executable
-- Built on: Ubuntu latest with GCC
+- **GUI**: `fast-duplicate-finder-linux-x64-gui.zip` - Flutter application bundle in ZIP format
+- **CLI**: `fast-duplicate-finder-linux-x64-cli.zip` - Command line executable in ZIP format
+- Built on: Ubuntu 22.04 with GCC
 
 #### Windows x64  
-- **GUI**: `.msix` package (Microsoft Store format)
-- **CLI**: `.zip` archive with .exe
-- Built on: Windows latest with MinGW-w64
+- **GUI**: `fast-duplicate-finder-windows-x64-gui.zip` - Flutter application bundle with launcher batch file
+- **CLI**: `fast-duplicate-finder-windows-x64-cli.zip` - Executable (.exe) in ZIP format
+- Built on: Windows latest with native tools
 
 #### macOS x64 & ARM64
-- **GUI**: `.dmg` disk images
-- **CLI**: `.zip` archives  
+- **GUI**: `fast-duplicate-finder-macos-{arch}-gui.zip` - macOS app bundle (.app) in ZIP format
+- **CLI**: `fast-duplicate-finder-macos-{arch}-cli.zip` - Command line executable in ZIP format
 - Built on: macOS 13 (x64) and macOS 14 (ARM64)
 
 ### Development Workflow
